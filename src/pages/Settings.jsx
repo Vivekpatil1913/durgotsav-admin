@@ -27,7 +27,7 @@ const SECTIONS = [
   { key: "initiative", title: "Initiative details", fields: [["unesco_title", "UNESCO serial nomination title"], ["gr_reference", "Government resolution reference (मराठी)", "textarea"], ["gr_reference_en", "Government resolution reference (English)", "textarea"]] },
   { key: "world_record", title: "World record section", fields: [["enabled", "Show section", "boolean"], ["eyebrow", "Eyebrow"], ["title", "Title"], ["body", "Text", "textarea"], ["image", "Image", "image"]] },
   { key: "contact", title: "Contact & helpline", fields: [["email", "Email"], ["phone", "Phone"], ["whatsapp", "WhatsApp number", "text", "Digits with country code, e.g. 919112226154"], ["hours", "Helpline hours"], ["address", "Address (मराठी)", "textarea"], ["address_en", "Address (English)", "textarea"]] },
-  { key: "social", title: "Social links", fields: [["instagram", "Instagram URL"], ["youtube", "YouTube URL"], ["facebook", "Facebook URL"], ["x", "X / Twitter URL"]] },
+  { key: "social", title: "Social links", fields: [["instagram", "Instagram URL"], ["youtube", "YouTube URL"], ["facebook", "Facebook URL"], ["linkedin", "LinkedIn URL"], ["google", "Google profile URL"], ["x", "X / Twitter URL"]] },
   { key: "seo", title: "SEO defaults", fields: [["site_name", "Site name"], ["default_title", "Default page title"], ["default_description", "Default meta description", "textarea"], ["og_image", "Social share image", "image"]] },
 ];
 
