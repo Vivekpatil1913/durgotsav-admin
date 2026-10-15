@@ -1,4 +1,4 @@
-import { AlertTriangle, Award, CheckCircle2, Download, Mail, MessageSquareWarning, Pencil, RotateCcw, Star, Trash2, Undo2, XCircle } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle2, Copy, Download, Mail, MessageSquareWarning, RotateCcw, Star, Trash2, Undo2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
@@ -10,6 +10,7 @@ const ACTIONS = {
   verify: { label: "Verify & issue certificate", icon: CheckCircle2, cls: "btn--success" },
   request_info: { label: "Request more info", icon: MessageSquareWarning, cls: "btn--ghost", needsNote: true },
   reject: { label: "Reject", icon: XCircle, cls: "btn--danger-ghost", needsNote: true },
+  mark_duplicate: { label: "Mark as duplicate", icon: Copy, cls: "btn--warning-ghost" },
   reset: { label: "Move back to pending", icon: RotateCcw, cls: "btn--ghost" },
 };
 
@@ -22,8 +23,8 @@ const NOTES = [
 ];
 
 export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
-  const { can } = useAuth();
-  const { toast, confirm } = useUi();
+  const { hasPermission } = useAuth();
+  const { toast } = useUi();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null); // 'reject' | 'request_info' | 'edit'
@@ -51,7 +52,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
       setData(res.data);
       setMode(null);
       setNote("");
-      toast(action === "verify" ? "Verified — certificate issued" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
+      toast(action === "verify" ? "Verified — certificate issued" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
       onChanged?.();
     } catch (err) {
       toast(apiError(err).message, "error");
@@ -89,14 +90,6 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
     }
   }
 
-  async function remove() {
-    if (!(await confirm({ title: "Move to trash?", message: "The registration is hidden everywhere but can be restored from the trash.", confirmLabel: "Move to trash" }))) return;
-    await api.delete(`/admin/registrations/${id}`);
-    toast("Moved to trash");
-    onChanged?.();
-    onClose();
-  }
-
   async function restore() {
     const { data: res } = await api.post(`/admin/registrations/${id}/restore`);
     setData(res.data);
@@ -105,12 +98,15 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
   }
 
   const r = data;
-  const current = r?.photos.find((p) => p.is_current);
+  // position 1 = main photo, 2 = optional second view; non-current rows are superseded uploads
+  const current = r?.photos.find((p) => p.is_current && (p.position ?? 1) === 1);
+  const second = r?.photos.find((p) => p.is_current && p.position === 2);
+  const earlier = r?.photos.filter((p) => !p.is_current) ?? [];
   const cert = r?.certificate;
 
   return (
     <Drawer open={Boolean(id)} onClose={onClose} wide title={r ? <>{r.registration_no} <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge></> : "Registration"}
-      footer={r && !r.deleted_at && mode !== "edit" && (
+      footer={r && !r.deleted_at && r.status !== "verified" && mode !== "edit" && (
         <div className="review-bar">
           {mode && ACTIONS[mode]?.needsNote && (
             <div className="review-bar__note">
@@ -120,7 +116,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
             </div>
           )}
           <div className="review-bar__actions">
-            {(r.status === "verified" ? ["request_info", "reject", "reset"] : r.status === "rejected" ? ["verify", "reset"] : ["verify", "request_info", "reject"]).map((a) => {
+            {(r.status === "rejected" || r.status === "duplicate" ? ["verify", "reset"] : ["verify", "mark_duplicate", "reject"]).map((a) => {
               const { label, icon: Icon, cls } = ACTIONS[a];
               return (
                 <button key={a} type="button" className={`btn ${mode === a ? (a === "reject" ? "btn--danger" : "btn--primary") : cls}`} disabled={busy} onClick={() => run(a)}>
@@ -139,14 +135,21 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
         <div className="reg-detail">
           {r.deleted_at && (
             <div className="alert alert--warning"><Trash2 size={16} /> In trash since {fmtDateTime(r.deleted_at)}.
-              {can("admin") && <button type="button" className="btn btn--sm btn--ghost" onClick={restore}><Undo2 size={14} /> Restore</button>}
+              {hasPermission("registrations", "delete") && <button type="button" className="btn btn--sm btn--ghost" onClick={restore}><Undo2 size={14} /> Restore</button>}
             </div>
           )}
           {current?.duplicate_of_photo_id && (
             <div className="alert alert--warning dup-alert">
               <AlertTriangle size={16} />
-              <span>This photo matches a photo in registration <strong>#{current.duplicate_of_registration_id}</strong> (PDF §3.4: the same photo may not be reused).</span>
+              <span>This photo matches a photo in registration <strong>{current.duplicate_of_registration_no}</strong>{current.duplicate_of_registration_name && <> ({current.duplicate_of_registration_name})</>} (PDF §3.4: the same photo may not be reused).</span>
               {current.duplicate_thumb_path && <img src={assetUrl(current.duplicate_thumb_path)} alt="Matching earlier photo" />}
+            </div>
+          )}
+          {second?.duplicate_of_photo_id && (
+            <div className="alert alert--warning dup-alert">
+              <AlertTriangle size={16} />
+              <span>The second photo matches a photo in registration <strong>{second.duplicate_of_registration_no}</strong>{second.duplicate_of_registration_name && <> ({second.duplicate_of_registration_name})</>}.</span>
+              {second.duplicate_thumb_path && <img src={assetUrl(second.duplicate_thumb_path)} alt="Matching earlier photo" />}
             </div>
           )}
           {r.same_phone_registrations.length > 0 && (
@@ -162,16 +165,21 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
                   <a href={assetUrl(current.image_path)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(current.image_path)} alt={`Photo submitted by ${r.name}`} /></a>
                   <figcaption>
                     <span>{current.width}×{current.height} · {Math.round((current.size_bytes || 0) / 1024)} KB{current.ai_score != null ? ` · 2025 AI score ${current.ai_score}` : ""}</span>
-                    <button type="button" className={`btn btn--sm ${current.is_featured ? "btn--gold" : "btn--ghost"}`} onClick={() => feature(current)} disabled={r.status !== "verified" && !current.is_featured} title={r.status !== "verified" ? "Verify first" : ""}>
-                      <Star size={14} /> {current.is_featured ? "In gallery" : "Feature in gallery"}
-                    </button>
                   </figcaption>
                 </figure>
               )}
-              {r.photos.length > 1 && (
+              {second && (
+                <figure className="photo-main photo-main--second">
+                  <a href={assetUrl(second.image_path)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(second.image_path)} alt={`Second photo submitted by ${r.name}`} /></a>
+                  <figcaption>
+                    <span>Second photo · {second.width}×{second.height} · {Math.round((second.size_bytes || 0) / 1024)} KB</span>
+                  </figcaption>
+                </figure>
+              )}
+              {earlier.length > 0 && (
                 <div className="photo-history">
                   <span className="muted">Earlier submissions</span>
-                  {r.photos.filter((p) => !p.is_current).map((p) => <a key={p.id} href={assetUrl(p.image_path)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(p.thumb_path)} alt="Earlier photo" /></a>)}
+                  {earlier.map((p) => <a key={p.id} href={assetUrl(p.image_path)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(p.thumb_path)} alt="Earlier photo" /></a>)}
                 </div>
               )}
             </div>
@@ -209,12 +217,6 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
                     {r.reviewed_at && <div><dt>Reviewed</dt><dd>{fmtDateTime(r.reviewed_at)}{r.reviewed_by_name ? ` by ${r.reviewed_by_name}` : ""}</dd></div>}
                     {r.review_note && <div><dt>Review note</dt><dd className="mr">{r.review_note}</dd></div>}
                   </dl>
-                  {!r.deleted_at && (
-                    <div className="cluster">
-                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setEdit({}); setMode("edit"); }}><Pencil size={14} /> Edit details</button>
-                      {can("admin") && <button type="button" className="btn btn--danger-ghost btn--sm" onClick={remove}><Trash2 size={14} /> Trash</button>}
-                    </div>
-                  )}
                 </>
               )}
 

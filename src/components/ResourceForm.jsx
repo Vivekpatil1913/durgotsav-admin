@@ -37,8 +37,8 @@ export function toPayload(fields, values, isEdit) {
   return out;
 }
 
-export function ResourceForm({ fields, values, onChange, errors, record }) {
-  const set = (k, v) => onChange({ ...values, [k]: v });
+export function ResourceForm({ fields, values, onChange, errors, record, readOnly = false, fieldOptions = {} }) {
+  const set = (k, v) => { if (!readOnly) onChange({ ...values, [k]: v }); };
   return (
     <div className="form-grid">
       {fields.map((f) => {
@@ -52,7 +52,7 @@ export function ResourceForm({ fields, values, onChange, errors, record }) {
         if (f.type === "boolean") {
           return (
             <label key={f.key} className={`${cls} switch`}>
-              <input type="checkbox" checked={Boolean(values[f.key])} onChange={(e) => set(f.key, e.target.checked)} />
+              <input type="checkbox" checked={Boolean(values[f.key])} onChange={(e) => set(f.key, e.target.checked)} disabled={readOnly} />
               <span className="switch__track" aria-hidden="true" />
               {f.label}
             </label>
@@ -89,10 +89,19 @@ export function ResourceForm({ fields, values, onChange, errors, record }) {
             <Field label={f.label} required={f.required} error={err} hint={f.hint}>
               {(p) => {
                 const common = { ...p, className: `input ${f.mr ? "mr" : ""}`, value: values[f.key] ?? "", onChange: (e) => set(f.key, e.target.value) };
-                if (f.type === "textarea" || f.type === "markdown") return <textarea {...common} rows={f.rows || (f.type === "markdown" ? 14 : 4)} className={`${common.className} ${f.type === "markdown" ? "input--code" : ""}`} />;
-                if (f.type === "select") return <select {...common}>{f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>;
+                if (f.type === "textarea" || f.type === "markdown") return <textarea {...common} rows={f.rows || (f.type === "markdown" ? 14 : 4)} className={`${common.className} ${f.type === "markdown" ? "input--code" : ""}`} disabled={readOnly} />;
+                if (f.type === "select") return <select {...common} disabled={readOnly}>{(f.options ?? []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>;
+                if (f.type === "apiselect") {
+                  const opts = fieldOptions[f.key] ?? [];
+                  return (
+                    <select {...common} disabled={readOnly}>
+                      <option value="">— Select —</option>
+                      {opts.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}
+                    </select>
+                  );
+                }
                 const type = { number: "number", date: "date", datetime: "datetime-local", password: "password" }[f.type] || "text";
-                return <input {...common} type={type} step={f.step} autoComplete={f.type === "password" ? "new-password" : undefined} />;
+                return <input {...common} type={type} step={f.step} autoComplete={f.type === "password" ? "new-password" : undefined} disabled={readOnly && f.type !== "password"} />;
               }}
             </Field>
           </div>

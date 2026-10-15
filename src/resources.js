@@ -1,11 +1,66 @@
 // Declarative CMS resources rendered by pages/ResourcePage.jsx.
-// field types: text | textarea | markdown | number | date | datetime | select | boolean | image | facts | password | readonly
+// field types: text | textarea | markdown | number | date | datetime | select | apiselect | boolean | image | facts | password | readonly
+// apiselect: fetches options from `optionsEndpoint`; maps items to [id, name_en||name_mr]
 import { ROLES } from "./lib/format.js";
 
 const active = { key: "is_active", label: "Active (visible on site)", type: "boolean", default: true };
 const order = { key: "sort_order", label: "Display order", type: "number", default: 0, hint: "Lower numbers appear first" };
 
 export const RESOURCES = {
+  divisions: {
+    title: "Divisions",
+    singular: "division",
+    endpoint: "/admin/divisions",
+    roles: ["admin"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    columns: [
+      { key: "name_mr", label: "Division", sub: "name_en", mr: true },
+    ],
+    fields: [
+      { key: "name_mr", label: "Name (Marathi)", required: true, mr: true },
+      { key: "name_en", label: "Name (English)", required: true },
+      order,
+      active,
+    ],
+  },
+  districts: {
+    title: "Districts",
+    singular: "district",
+    endpoint: "/admin/districts",
+    roles: ["admin"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    filters: [{ key: "division_id", label: "Division", optionsEndpoint: "/admin/divisions?limit=100" }],
+    columns: [
+      { key: "name_mr", label: "District", sub: "name_en", mr: true },
+      { key: "division_name", label: "Division" },
+    ],
+    fields: [
+      { key: "name_mr", label: "Name (Marathi)", required: true, mr: true },
+      { key: "name_en", label: "Name (English)", required: true },
+      { key: "division_id", label: "Division", type: "apiselect", required: true, optionsEndpoint: "/admin/divisions?limit=100" },
+      order,
+      active,
+    ],
+  },
+  talukas: {
+    title: "Talukas",
+    singular: "taluka",
+    endpoint: "/admin/talukas",
+    roles: ["admin"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    filters: [{ key: "district_id", label: "District", optionsEndpoint: "/admin/districts?limit=100" }],
+    columns: [
+      { key: "name_mr", label: "Taluka", sub: "name_en", mr: true },
+      { key: "district_name", label: "District" },
+    ],
+    fields: [
+      { key: "name_mr", label: "Name (Marathi)", required: true, mr: true },
+      { key: "name_en", label: "Name (English)", required: true },
+      { key: "district_id", label: "District", type: "apiselect", required: true, optionsEndpoint: "/admin/districts?limit=100" },
+      order,
+      active,
+    ],
+  },
   forts: {
     title: "Forts",
     singular: "fort",
@@ -40,68 +95,6 @@ export const RESOURCES = {
     ],
     gallery: true,
   },
-  events: {
-    title: "Timeline / events",
-    singular: "event",
-    endpoint: "/admin/events",
-    roles: ["admin"],
-    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
-    columns: [
-      { key: "title", label: "Title", mr: true },
-      { key: "date_label", label: "When", mr: true, fallback: "start_date" },
-    ],
-    fields: [
-      { key: "title", label: "Title", required: true, mr: true },
-      { key: "description", label: "Description", type: "textarea", mr: true },
-      { key: "start_date", label: "Start date", type: "date", half: true },
-      { key: "end_date", label: "End date", type: "date", half: true },
-      { key: "date_label", label: "Date text shown on site", mr: true, hint: "e.g. पडताळणी पूर्ण झाल्यानंतर — overrides the dates" },
-      { key: "icon", label: "Icon", type: "select", options: [["register", "Registration"], ["camera", "Photo"], ["verify", "Verification"], ["award", "Certificate"]], default: "register" },
-      order,
-      active,
-    ],
-  },
-  announcements: {
-    title: "Announcements",
-    singular: "announcement",
-    endpoint: "/admin/announcements",
-    roles: ["admin"],
-    can: { create: true, toggle: true, delete: true, restore: true },
-    columns: [
-      { key: "title", label: "Title", mr: true },
-      { key: "published_at", label: "Published", type: "datetime" },
-      { key: "is_pinned", label: "Pinned", type: "bool" },
-    ],
-    fields: [
-      { key: "title", label: "Title", required: true, mr: true },
-      { key: "body", label: "Body", type: "textarea", mr: true },
-      { key: "link_url", label: "Link", hint: "/participate or https://…" },
-      { key: "link_label", label: "Link label", mr: true },
-      { key: "published_at", label: "Publish at", type: "datetime", hint: "Future dates stay hidden until then" },
-      { key: "is_pinned", label: "Pin to top", type: "boolean", default: false },
-      active,
-    ],
-  },
-  videos: {
-    title: "Videos",
-    singular: "video",
-    endpoint: "/admin/videos",
-    roles: ["admin"],
-    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
-    columns: [
-      { key: "thumbnail", type: "image" },
-      { key: "title", label: "Title", mr: true },
-      { key: "youtube_url", label: "YouTube" },
-    ],
-    fields: [
-      { key: "title", label: "Title", required: true, mr: true },
-      { key: "youtube_url", label: "YouTube link", required: true, hint: "https://www.youtube.com/watch?v=… or youtu.be/…" },
-      { key: "description", label: "Description", type: "textarea", mr: true },
-      { key: "thumbnail", label: "Custom thumbnail (optional)", type: "image", folder: "videos" },
-      order,
-      active,
-    ],
-  },
   testimonials: {
     title: "Testimonials",
     singular: "testimonial",
@@ -118,6 +111,24 @@ export const RESOURCES = {
       { key: "message", label: "Message", type: "textarea", required: true, mr: true, rows: 8 },
       { key: "photo", label: "Photo", type: "image", folder: "testimonials" },
       order,
+      active,
+    ],
+  },
+  podcasts: {
+    title: "Podcasts",
+    singular: "podcast",
+    endpoint: "/admin/podcasts",
+    roles: ["admin"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    columns: [
+      { key: "youtube_id", type: "youtube" },
+      { key: "title_en", label: "Episode", sub: "title_mr" },
+    ],
+    fields: [
+      { key: "youtube_id", label: "YouTube video", required: true, hint: "Paste the YouTube link or the 11-character video id" },
+      { key: "title_mr", label: "Title (Marathi)", required: true, mr: true },
+      { key: "title_en", label: "Title (English)", required: true },
+      { ...order, hint: "Episode number order — lower numbers appear first" },
       active,
     ],
   },

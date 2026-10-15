@@ -1,4 +1,4 @@
-import { Ban, Download, Mail, RotateCcw, Search, Send } from "lucide-react";
+import { Download, Mail, RotateCcw, Search, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, DataTable, PageHeader, Pagination } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -11,14 +11,14 @@ import { fmtDateTime } from "../lib/format.js";
 export default function Certificates() {
   const { can } = useAuth();
   const { toast, confirm } = useUi();
-  const [f, setF] = useQueryState({ q: "", state: "", emailed: "", page: "1" });
+  const [f, setF] = useQueryState({ q: "", state: "", emailed: "", limit: "25", page: "1" });
   const [search, setSearch] = useState(f.q);
   const q = useDebounced(search);
   useEffect(() => {
     if (q !== f.q) setF({ q });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
-  const { data, loading, error, reload } = useFetch("/admin/certificates", clean({ ...f, limit: 25 }));
+  const { data, loading, error, reload } = useFetch("/admin/certificates", clean({ ...f }));
 
   const act = async (fn, ok) => {
     try {
@@ -29,12 +29,6 @@ export default function Certificates() {
       toast(apiError(err).message, "error");
     }
   };
-
-  async function revoke(c) {
-    const reason = window.prompt(`Reason for revoking ${c.certificate_no}? (PDF §7.7)`);
-    if (!reason?.trim()) return;
-    act(() => api.post(`/admin/certificates/${c.registration_id}/revoke`, { reason: reason.trim() }), "Certificate revoked");
-  }
 
   async function sendPending() {
     if (!(await confirm({ title: "Email all pending certificates?", message: "Every verified participant with an email who has not yet received their certificate will be emailed.", confirmLabel: "Send emails", tone: "primary" }))) return;
@@ -60,7 +54,6 @@ export default function Certificates() {
       <div className="row-actions" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="icon-btn" title="Preview PDF" onClick={() => downloadFile(`/admin/certificates/${c.registration_id}/pdf`, null, `${c.certificate_no}.pdf`, { open: true })}><Download size={15} /></button>
         {!c.revoked_at && c.email && <button type="button" className="icon-btn" title="Resend email / SMS" onClick={() => act(() => api.post(`/admin/certificates/${c.registration_id}/resend`), "Resent")}><Send size={15} /></button>}
-        {can("admin") && !c.revoked_at && <button type="button" className="icon-btn icon-btn--danger" title="Revoke" onClick={() => revoke(c)}><Ban size={15} /></button>}
         {can("admin") && c.revoked_at && <button type="button" className="icon-btn" title="Reinstate" onClick={() => act(() => api.post(`/admin/certificates/${c.registration_id}/reinstate`), "Reinstated")}><RotateCcw size={15} /></button>}
       </div>
     ) },
@@ -70,20 +63,22 @@ export default function Certificates() {
     <>
       <PageHeader title="Certificates" crumbs={["Participation"]} subtitle="Digital अभिनंदन पत्र issued on verification."
         actions={can("admin") && <button type="button" className="btn btn--primary" onClick={sendPending}><Mail size={16} /> Email pending</button>} />
+      <div className="resource-tabs" role="tablist" aria-label="Certificate state">
+        {[["", "All certificates"], ["valid", "Valid"], ["revoked", "Revoked"]].map(([k, l]) => (
+          <button key={l} type="button" role="tab" aria-selected={f.state === k} className={`resource-tab ${f.state === k ? "is-active" : ""}`} onClick={() => setF({ state: k })}>{l}</button>
+        ))}
+      </div>
       <div className="toolbar">
         <label className="search"><Search size={16} aria-hidden="true" /><span className="sr-only">Search</span>
           <input className="input" placeholder="Name, mobile or certificate no" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
-        <select className="input" aria-label="State" value={f.state} onChange={(e) => setF({ state: e.target.value })}>
-          <option value="">Valid & revoked</option><option value="valid">Valid</option><option value="revoked">Revoked</option>
-        </select>
         <select className="input" aria-label="Email" value={f.emailed} onChange={(e) => setF({ emailed: e.target.value })}>
           <option value="">Any email state</option><option value="yes">Emailed</option><option value="no">Not yet emailed</option>
         </select>
       </div>
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={data?.data} loading={loading} error={error} empty="No certificates yet — they are issued when a registration is verified" />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} />
       </section>
     </>
   );

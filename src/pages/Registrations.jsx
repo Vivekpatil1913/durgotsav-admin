@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { BulkBar } from "../components/BulkBar.jsx";
 import { RegistrationDrawer } from "../components/RegistrationDrawer.jsx";
 import { Badge, DataTable, PageHeader, Pagination, useSelection } from "../components/ui.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
 import { clean, useQueryState } from "../hooks/useQueryState.js";
 import { apiError, assetUrl, downloadFile } from "../lib/api.js";
 import { fmtDateTime, PARTICIPANT_TYPES, STATUS } from "../lib/format.js";
 
-const DEFAULTS = { q: "", status: "", district_id: "", fort_id: "", participant_type: "", from: "", to: "", duplicates: "", featured: "", trashed: "", sort: "newest", page: "1" };
+const DEFAULTS = { q: "", status: "", division_id: "", district_id: "", taluka_id: "", fort_id: "", from: "", to: "", duplicates: "", featured: "", trashed: "", sort: "newest", limit: "10", page: "1" };
 
 export default function Registrations() {
   const { toast } = useUi();
@@ -18,15 +19,18 @@ export default function Registrations() {
   const q = useDebounced(search);
   const [openId, setOpenId] = useState(null);
   const selection = useSelection();
-  const lookups = useFetch("/admin/lookups").data?.data ?? { districts: [], forts: [] };
+  const canBulk = useAuth().hasExplicitPermission("moderation_bulk");
+  const lookups = useFetch("/admin/lookups").data?.data ?? { divisions: [], districts: [], talukas: [], forts: [] };
 
   useEffect(() => {
     if (q !== f.q) setF({ q });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
-  const params = clean({ ...f, limit: 25 });
+  const params = clean({ ...f });
   const { data, loading, error, reload } = useFetch("/admin/registrations", params);
   const rows = data?.data ?? [];
+  const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : [];
+  const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
 
   const columns = [
     { key: "photo", label: "", width: 64, render: (r) => r.thumb_path ? <img className="thumb" src={assetUrl(r.thumb_path)} alt="" loading="lazy" /> : <span className="thumb thumb--empty" /> },
@@ -66,6 +70,18 @@ export default function Registrations() {
         actions={<button type="button" className="btn btn--ghost" onClick={exportCsv}><Download size={16} /> Export CSV</button>}
       />
 
+      <div className="resource-tabs">
+        {[["", "All registrations"], ["duplicates", "Duplicates"], ["featured", "In gallery"], ["trashed", "Trash"]].map(([k, l]) => {
+          const active = k ? f[k] === "true" : !(f.duplicates || f.featured || f.trashed);
+          return (
+            <button key={l} type="button" className={`resource-tab ${active ? "is-active" : ""}`}
+              onClick={() => setF({ duplicates: "", featured: "", trashed: "", ...(k && { [k]: "true" }) })}>
+              {k === "trashed" && <Trash2 size={13} />} {l}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="toolbar">
         <label className="search">
           <Search size={16} aria-hidden="true" />
@@ -76,17 +92,21 @@ export default function Registrations() {
           <option value="">All statuses</option>
           {Object.entries(STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
         </select>
-        <select className="input mr" aria-label="District" value={f.district_id} onChange={(e) => setF({ district_id: e.target.value })}>
-          <option value="">All districts</option>
-          {lookups.districts.map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
+        <select className="input mr" aria-label="Division" value={f.division_id} onChange={(e) => setF({ division_id: e.target.value, district_id: "", taluka_id: "" })}>
+          <option value="">All divisions</option>
+          {(lookups.divisions ?? []).map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
+        </select>
+        <select className="input mr" aria-label="District" value={f.district_id} disabled={!f.division_id} onChange={(e) => setF({ district_id: e.target.value, taluka_id: "" })}>
+          <option value="">{f.division_id ? "All districts" : "Select division first"}</option>
+          {districts.map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
+        </select>
+        <select className="input mr" aria-label="Taluka" value={f.taluka_id} disabled={!f.district_id} onChange={(e) => setF({ taluka_id: e.target.value })}>
+          <option value="">{f.district_id ? "All talukas" : "Select district first"}</option>
+          {talukas.map((t) => <option key={t.id} value={t.id}>{t.name_mr}</option>)}
         </select>
         <select className="input mr" aria-label="Fort" value={f.fort_id} onChange={(e) => setF({ fort_id: e.target.value })}>
           <option value="">All forts</option>
           {lookups.forts.map((x) => <option key={x.id} value={x.id}>{x.name_mr}</option>)}
-        </select>
-        <select className="input" aria-label="Participant type" value={f.participant_type} onChange={(e) => setF({ participant_type: e.target.value })}>
-          <option value="">All types</option>
-          {Object.entries(PARTICIPANT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <input className="input" type="date" aria-label="From date" value={f.from} onChange={(e) => setF({ from: e.target.value })} />
         <input className="input" type="date" aria-label="To date" value={f.to} onChange={(e) => setF({ to: e.target.value })} />
@@ -95,19 +115,14 @@ export default function Registrations() {
           <option value="oldest">Oldest first</option>
           <option value="name">Name A–Z</option>
         </select>
-        <div className="toggles">
-          <label className="toggle"><input type="checkbox" checked={f.duplicates === "true"} onChange={(e) => setF({ duplicates: e.target.checked ? "true" : "" })} /> Duplicates</label>
-          <label className="toggle"><input type="checkbox" checked={f.featured === "true"} onChange={(e) => setF({ featured: e.target.checked ? "true" : "" })} /> In gallery</label>
-          <label className="toggle"><input type="checkbox" checked={f.trashed === "true"} onChange={(e) => setF({ trashed: e.target.checked ? "true" : "" })} /> <Trash2 size={13} /> Trash</label>
-        </div>
       </div>
 
       <section className="panel panel--flush">
-        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={(r) => setOpenId(r.id)} selection={f.trashed ? undefined : selection} empty="No registrations match these filters" />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
+        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={(r) => setOpenId(r.id)} selection={f.trashed || !canBulk ? undefined : selection} empty="No registrations match these filters" />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} jump={false} />
       </section>
 
-      <BulkBar selection={selection} photoIds={(ids) => rows.filter((r) => ids.includes(r.id) && r.photo_id).map((r) => r.photo_id)} onDone={reload} />
+      {canBulk && <BulkBar selection={selection} photoIds={(ids) => rows.filter((r) => ids.includes(r.id) && r.photo_id).map((r) => r.photo_id)} onDone={reload} />}
       <RegistrationDrawer id={openId} lookups={lookups} onClose={() => setOpenId(null)} onChanged={reload} />
     </>
   );

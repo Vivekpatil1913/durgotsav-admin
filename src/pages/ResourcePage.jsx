@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Search, Trash2, Undo2 } from "lucide-react";
+import { Eye, Pencil, Plus, Search, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { FortGallery } from "../components/FortGallery.jsx";
@@ -17,6 +17,7 @@ const ENQUIRY_TONE = { new: "warning", in_progress: "info", resolved: "success",
 function cell(col, row) {
   const v = row[col.key];
   if (col.type === "image") return v ? <img className="thumb" src={assetUrl(v)} alt="" loading="lazy" /> : <span className="thumb thumb--empty" />;
+  if (col.type === "youtube") return v ? <img className="thumb" src={`https://i.ytimg.com/vi/${v}/default.jpg`} alt="" loading="lazy" /> : <span className="thumb thumb--empty" />;
   if (col.type === "datetime") return <small>{fmtDateTime(v)}</small>;
   if (col.type === "bool") return v ? <Badge tone="success">Yes</Badge> : <Badge>No</Badge>;
   if (col.type === "status") return <Badge tone={ENQUIRY_TONE[v]}>{String(v).replace("_", " ")}</Badge>;
@@ -33,13 +34,31 @@ export default function ResourcePage() {
   const cfg = RESOURCES[resource];
   const { can } = useAuth();
   const { toast, confirm } = useUi();
-  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
+  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", limit: "25", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
   const [search, setSearch] = useState(f.q);
   const q = useDebounced(search);
   const [editing, setEditing] = useState(null); // null | 'new' | record
   const [values, setValues] = useState({});
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [viewOnly, setViewOnly] = useState(false);
+  const [fieldOptions, setFieldOptions] = useState({});
+
+  useEffect(() => {
+    if (!cfg) return;
+    const fetched = new Set();
+    const load = (key, endpoint) => {
+      if (fetched.has(endpoint)) return;
+      fetched.add(endpoint);
+      api.get(endpoint).then((res) => {
+        const items = res.data?.data ?? [];
+        const mapped = items.map((item) => [String(item.id), item.name_en || item.name_mr]);
+        setFieldOptions((prev) => ({ ...prev, [key]: mapped }));
+      }).catch(() => {});
+    };
+    (cfg.fields ?? []).filter((f) => f.type === "apiselect" && f.optionsEndpoint).forEach((f) => load(f.key, f.optionsEndpoint));
+    (cfg.filters ?? []).filter((f) => f.optionsEndpoint).forEach((f) => load(`_filter_${f.key}`, f.optionsEndpoint));
+  }, [cfg]);
 
   useEffect(() => {
     if (q !== f.q) setF({ q });
@@ -47,7 +66,7 @@ export default function ResourcePage() {
   }, [q]);
   useEffect(() => setSearch(""), [resource]);
 
-  const { data, loading, error, reload } = useFetch(cfg ? cfg.endpoint : null, clean({ ...f, limit: 25 }));
+  const { data, loading, error, reload } = useFetch(cfg ? cfg.endpoint : null, clean({ ...f }));
   if (!cfg) return <Navigate to="/" replace />;
   if (!can(...cfg.roles)) return <div className="alert alert--error">You do not have access to {cfg.title}.</div>;
 
@@ -55,10 +74,11 @@ export default function ResourcePage() {
   const trashed = f.trashed === "true";
   const isEdit = editing && editing !== "new";
 
-  function open(record) {
+  function open(record, readOnly = false) {
     setErrors({});
     setValues(initialValues(cfg.fields, record));
     setEditing(record ?? "new");
+    setViewOnly(readOnly);
   }
 
   async function save() {
@@ -98,33 +118,20 @@ export default function ResourcePage() {
     if (editing?.id === row.id) setEditing(null);
   }
 
-  // Swap display order with the neighbour
-  async function move(row, dir) {
-    const i = rows.indexOf(row);
-    const other = rows[i + dir];
-    if (!other) return;
-    const a = row.sort_order === other.sort_order ? i : row.sort_order;
-    const b = row.sort_order === other.sort_order ? i + dir : other.sort_order;
-    act(() => api.put(`${cfg.endpoint}/reorder`, { items: [{ id: row.id, sort_order: b }, { id: other.id, sort_order: a }] }), "Order updated");
-  }
-
   const columns = [
-    ...cfg.columns.map((c) => ({ key: c.key, label: c.label ?? "", width: c.type === "image" ? 64 : undefined, render: (r) => cell(c, r) })),
-    ...(!cfg.noActiveFilter && !trashed && cfg.can.toggle ? [{ key: "is_active", label: "Visible", render: (r) => (
-      <button type="button" className={`pill-toggle ${r.is_active ? "is-on" : ""}`} onClick={(e) => { e.stopPropagation(); act(() => api.patch(`${cfg.endpoint}/${r.id}/toggle`), r.is_active ? "Hidden from site" : "Now visible"); }} aria-pressed={r.is_active}>
-        {r.is_active ? <Eye size={14} /> : <EyeOff size={14} />} {r.is_active ? "Active" : "Hidden"}
-      </button>
-    ) }] : []),
-    { key: "_actions", label: "", render: (r) => (
+    ...cfg.columns.map((c) => ({ key: c.key, label: c.label ?? "", width: c.type === "image" || c.type === "youtube" ? 64 : undefined, render: (r) => cell(c, r) })),
+    { key: "_actions", label: "Actions", render: (r) => (
       <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-        {cfg.can.reorder && !trashed && (
-          <>
-            <button type="button" className="icon-btn" onClick={() => move(r, -1)} disabled={rows.indexOf(r) === 0} aria-label="Move up"><ArrowUp size={14} /></button>
-            <button type="button" className="icon-btn" onClick={() => move(r, 1)} disabled={rows.indexOf(r) === rows.length - 1} aria-label="Move down"><ArrowDown size={14} /></button>
-          </>
+        {!trashed && cfg.can.toggle && !cfg.noActiveFilter && (
+          <label className="row-toggle" title={r.is_active ? "Deactivate" : "Activate"} onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={Boolean(r.is_active)} onChange={() => act(() => api.patch(`${cfg.endpoint}/${r.id}/toggle`), r.is_active ? "Hidden from site" : "Now visible")} />
+            <span className="switch__track" aria-hidden="true" />
+          </label>
         )}
+        {!trashed && <button type="button" className="icon-btn" onClick={() => open(r, true)} aria-label="View" title="View"><Eye size={14} /></button>}
+        {!trashed && <button type="button" className="icon-btn icon-btn--edit" onClick={() => open(r, false)} aria-label="Edit" title="Edit"><Pencil size={14} /></button>}
         {trashed && cfg.can.restore && <button type="button" className="btn btn--ghost btn--sm" onClick={() => act(() => api.post(`${cfg.endpoint}/${r.id}/restore`), "Restored")}><Undo2 size={14} /> Restore</button>}
-        {!trashed && cfg.can.delete && <button type="button" className="icon-btn icon-btn--danger" onClick={() => remove(r)} aria-label="Move to trash"><Trash2 size={14} /></button>}
+        {!trashed && cfg.can.delete && <button type="button" className="icon-btn icon-btn--danger" onClick={() => remove(r)} aria-label="Move to trash" title="Delete"><Trash2 size={14} /></button>}
       </div>
     ) },
   ];
@@ -132,44 +139,58 @@ export default function ResourcePage() {
   return (
     <>
       <PageHeader title={cfg.title} crumbs={[resource === "enquiries" ? "Inbox" : resource === "admins" ? "System" : "Content"]}
-        actions={cfg.can.create && <button type="button" className="btn btn--primary" onClick={() => open(null)}><Plus size={16} /> New {cfg.singular}</button>} />
+        actions={cfg.can.create && !trashed && <button type="button" className="btn btn--primary" onClick={() => open(null)}><Plus size={16} /> New {cfg.singular}</button>} />
+
+      {(!cfg.noTrash && cfg.can.restore) && (
+        <div className="resource-tabs">
+          <button type="button" className={`resource-tab ${!trashed ? "is-active" : ""}`} onClick={() => setF({ trashed: "" })}>
+            {cfg.title}
+          </button>
+          <button type="button" className={`resource-tab ${trashed ? "is-active" : ""}`} onClick={() => setF({ trashed: "true" })}>
+            <Trash2 size={13} /> Trash
+          </button>
+        </div>
+      )}
 
       <div className="toolbar">
-        <label className="search"><Search size={16} aria-hidden="true" /><span className="sr-only">Search</span>
-          <input className="input" placeholder={`Search ${cfg.title.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <label className="search search--wide"><Search size={16} aria-hidden="true" /><span className="sr-only">Search</span>
+          <input className="input" placeholder={`Search ${cfg.title.toLowerCase()}…`} value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
-        {!cfg.noActiveFilter && (
-          <select className="input" aria-label="Visibility" value={f.is_active} onChange={(e) => setF({ is_active: e.target.value })}>
-            <option value="">Active & hidden</option><option value="true">Active only</option><option value="false">Hidden only</option>
-          </select>
-        )}
-        {(cfg.filters ?? []).map((flt) => (
-          <select key={flt.key} className="input" aria-label={flt.label} value={f[flt.key]} onChange={(e) => setF({ [flt.key]: e.target.value })}>
-            <option value="">All {flt.label.toLowerCase()}</option>
-            {flt.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        ))}
-        {!cfg.noTrash && cfg.can.restore && (
-          <label className="toggle"><input type="checkbox" checked={trashed} onChange={(e) => setF({ trashed: e.target.checked ? "true" : "" })} /> <Trash2 size={13} /> Trash</label>
-        )}
+
+        {(cfg.filters ?? []).map((flt) => {
+          const opts = flt.optionsEndpoint
+            ? (fieldOptions[`_filter_${flt.key}`] ?? fieldOptions[flt.key] ?? [])
+            : (flt.options ?? []);
+          return (
+            <select key={flt.key} className="input" aria-label={flt.label} value={f[flt.key]} onChange={(e) => setF({ [flt.key]: e.target.value })}>
+              <option value="">All {flt.label.toLowerCase()}</option>
+              {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          );
+        })}
       </div>
 
       <section className="panel panel--flush">
-        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
+        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} startIndex={data?.meta ? (data.meta.page - 1) * data.meta.limit : 0} total={data?.meta?.total} />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} />
       </section>
 
-      <Drawer open={Boolean(editing)} onClose={() => setEditing(null)} wide={cfg.gallery} title={isEdit ? `Edit ${cfg.singular}` : `New ${cfg.singular}`}
-        footer={<>
-          <button type="button" className="btn btn--ghost" onClick={() => setEditing(null)}>Cancel</button>
-          <button type="button" className="btn btn--primary" onClick={save} disabled={saving}>{saving && <Spinner />} {isEdit ? "Save changes" : `Create ${cfg.singular}`}</button>
-        </>}
+      <Drawer open={Boolean(editing)} onClose={() => { setEditing(null); setViewOnly(false); }} wide={cfg.gallery}
+        title={viewOnly ? cfg.singular : (isEdit ? `Edit ${cfg.singular}` : `New ${cfg.singular}`)}
+        footer={viewOnly ? (
+          <button type="button" className="btn btn--ghost" onClick={() => { setEditing(null); setViewOnly(false); }}>Close</button>
+        ) : (
+          <>
+            <button type="button" className="btn btn--ghost" onClick={() => setEditing(null)}>Cancel</button>
+            <button type="button" className="btn btn--primary" onClick={save} disabled={saving}>{saving && <Spinner />} {isEdit ? "Save changes" : `Create ${cfg.singular}`}</button>
+          </>
+        )}
       >
         {editing && (
           <>
-            <ResourceForm fields={cfg.fields} values={values} onChange={setValues} errors={errors} record={isEdit ? editing : null} />
-            {cfg.gallery && isEdit && <FortGallery fortId={editing.id} />}
-            {cfg.gallery && !isEdit && <p className="muted">Save the fort first to add gallery photos.</p>}
+            <ResourceForm fields={cfg.fields} values={values} onChange={setValues} errors={errors} record={isEdit ? editing : null} readOnly={viewOnly} fieldOptions={fieldOptions} />
+            {!viewOnly && cfg.gallery && isEdit && <FortGallery fortId={editing.id} />}
+            {!viewOnly && cfg.gallery && !isEdit && <p className="muted">Save the fort first to add gallery photos.</p>}
           </>
         )}
       </Drawer>

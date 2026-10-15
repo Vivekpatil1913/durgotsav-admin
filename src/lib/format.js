@@ -21,6 +21,7 @@ export const STATUS = {
   info_requested: { label: "Info requested", tone: "info" },
   verified: { label: "Verified", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
+  duplicate: { label: "Duplicate", tone: "gold" },
 };
 
 export const PARTICIPANT_TYPES = {

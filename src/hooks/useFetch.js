@@ -1,27 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, apiError } from "../lib/api.js";
 
-// GET with loading/error state; keeps the previous data while refetching so tables don't flash.
+// GET with loading/error state; cancels the previous in-flight request on each new call
+// so rapid filter changes never surface stale data.
 export function useFetch(url, params) {
   const key = url ? `${url}?${JSON.stringify(params ?? {})}` : null;
   const [state, setState] = useState({ data: null, loading: Boolean(url), error: null });
-  const latest = useRef(0);
+  const ctrl = useRef(null);
 
   const load = useCallback(async () => {
     if (!url) return;
-    const id = ++latest.current;
+    ctrl.current?.abort();
+    ctrl.current = new AbortController();
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const { data } = await api.get(url, { params });
-      if (id === latest.current) setState({ data, loading: false, error: null });
+      const { data } = await api.get(url, { params, signal: ctrl.current.signal });
+      setState({ data, loading: false, error: null });
     } catch (err) {
-      if (id === latest.current) setState((s) => ({ ...s, loading: false, error: apiError(err) }));
+      if (err.code !== "ERR_CANCELED") {
+        setState((s) => ({ ...s, loading: false, error: apiError(err) }));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   useEffect(() => {
     load();
+    return () => ctrl.current?.abort();
   }, [load]);
 
   return { ...state, reload: load };

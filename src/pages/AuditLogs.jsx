@@ -6,8 +6,8 @@ import { fmtDateTime } from "../lib/format.js";
 const ENTITIES = ["registration", "certificate", "photo", "fort", "event", "announcement", "video", "testimonial", "faq", "page", "enquiry", "admin", "settings", "file"];
 
 export default function AuditLogs() {
-  const [f, setF] = useQueryState({ entity: "", action: "", page: "1" });
-  const { data, loading, error } = useFetch("/admin/audit-logs", clean({ ...f, limit: 50 }));
+  const [f, setF] = useQueryState({ entity: "", action: "", limit: "50", page: "1" });
+  const { data, loading, error } = useFetch("/admin/audit-logs", clean({ ...f }));
   const columns = [
     { key: "created_at", label: "When", render: (r) => <small>{fmtDateTime(r.created_at)}</small> },
     { key: "admin", label: "Who", render: (r) => <div className="cell-stack"><strong>{r.admin_name ?? "System"}</strong><small>{r.admin_email}</small></div> },
@@ -28,7 +28,7 @@ export default function AuditLogs() {
       </div>
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={data?.data} loading={loading} error={error} />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} limitOptions={[25, 50, 100]} />
       </section>
     </>
   );

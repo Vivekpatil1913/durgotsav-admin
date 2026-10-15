@@ -12,6 +12,17 @@ export function AuthProvider({ children }) {
     setAdmin(null);
   }, []);
 
+  // Re-read the admin (and their role's permissions) so role edits apply without re-login.
+  const refresh = useCallback(() => {
+    if (!tokenStore.get()) return Promise.resolve();
+    return api.get("/auth/me").then((r) => setAdmin(r.data.admin)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refresh]);
+
   useEffect(() => {
     setUnauthorizedHandler(logout);
     if (!tokenStore.get()) {
@@ -31,10 +42,40 @@ export function AuthProvider({ children }) {
     return data.admin;
   }, []);
 
-  // super_admin can do everything; otherwise the role must be listed
-  const can = useCallback((...roles) => Boolean(admin) && (admin.role === "super_admin" || roles.includes(admin.role)), [admin]);
+  // True when the admin's role has is_admin = true (super-admin pass-through).
+  const isAdmin = useMemo(() => Boolean(admin?.is_admin), [admin]);
 
-  const value = useMemo(() => ({ admin, ready, login, logout, can }), [admin, ready, login, logout, can]);
+  // Check if the admin can perform `level` on `moduleKey`.
+  // is_admin roles bypass all permission checks (returns true for everything).
+  // Mirrors the server-side canDo() in permissions.registry.js.
+  const hasPermission = useCallback((moduleKey, level = "read") => {
+    if (!admin) return false;
+    if (admin.is_admin) return true;
+    const mp = admin.role_permissions?.[moduleKey];
+    if (!mp) return false;
+    if (level === "read")   return Boolean(mp.read || mp.write || mp.delete);
+    if (level === "write")  return Boolean(mp.write || mp.delete);
+    if (level === "delete") return Boolean(mp.delete);
+    return false;
+  }, [admin]);
+
+  // "Explicit" permissions (e.g. moderation_bulk) are NOT auto-granted by is_admin — read the role JSONB.
+  // Mirrors the server-side checkExplicitPermission().
+  const hasExplicitPermission = useCallback(
+    (moduleKey) => Boolean(admin?.role_permissions?.[moduleKey]?.read),
+    [admin],
+  );
+
+  // Legacy helper kept for existing Protected role checks (super_admin / admin / moderator)
+  const can = useCallback((...roles) =>
+    Boolean(admin) && (admin.is_admin || roles.includes(admin.role)),
+    [admin],
+  );
+
+  const value = useMemo(
+    () => ({ admin, ready, login, logout, refresh, can, isAdmin, hasPermission, hasExplicitPermission }),
+    [admin, ready, login, logout, refresh, can, isAdmin, hasPermission, hasExplicitPermission],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

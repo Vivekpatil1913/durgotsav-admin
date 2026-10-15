@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, ImagePlus, Inbox, Loader2, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsUpDown, ImagePlus, Inbox, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtNumber } from "../lib/format.js";
@@ -81,18 +81,43 @@ export function Drawer({ open, onClose, title, children, footer, wide }) {
   );
 }
 
-export function Pagination({ meta, onPage }) {
+export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100], jump = true }) {
   if (!meta) return null;
   const { page, totalPages, total, limit } = meta;
   const from = total ? (page - 1) * limit + 1 : 0;
   const to = Math.min(total, page * limit);
+
+  function handleJump(e) {
+    const p = parseInt(e.currentTarget.value, 10);
+    if (!isNaN(p) && p >= 1 && p <= totalPages && p !== page) onPage(p);
+  }
+
   return (
     <div className="pagination">
-      <span>{fmtNumber(from)}–{fmtNumber(to)} of {fmtNumber(total)}</span>
-      <div>
-        <button type="button" className="icon-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page"><ChevronLeft size={16} /></button>
-        <span className="pagination__page">Page {page} / {totalPages}</span>
-        <button type="button" className="icon-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="Next page"><ChevronRight size={16} /></button>
+      <span className="pagination__info">Showing <strong>{fmtNumber(from)}–{fmtNumber(to)}</strong> of <strong>{fmtNumber(total)}</strong> records</span>
+      <div className="pagination__nav">
+        {onLimit && (
+          <select className="input pagination__limit" value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Rows per page">
+            {limitOptions.map((n) => <option key={n} value={n}>{n} per page</option>)}
+          </select>
+        )}
+        <button type="button" className="btn btn--outline btn--sm" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={14} /> Previous</button>
+        <span className="pagination__page">
+          Page{" "}
+          {jump ? <input
+            key={page}
+            type="number"
+            className="pagination__jump-input"
+            defaultValue={page}
+            min={1}
+            max={totalPages}
+            aria-label="Go to page"
+            onBlur={handleJump}
+            onKeyDown={(e) => e.key === "Enter" && handleJump(e)}
+          /> : <strong>{fmtNumber(page)}</strong>}
+          {" "}of {fmtNumber(totalPages)}
+        </span>
+        <button type="button" className="btn btn--outline btn--sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Next <ChevronRight size={14} /></button>
       </div>
     </div>
   );
@@ -102,9 +127,10 @@ export function Pagination({ meta, onPage }) {
  * columns: [{ key, label, render?(row), width?, className? }]
  * selection: { selected:Set, onToggle(id), onToggleAll(ids) } (optional)
  */
-export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id }) {
+export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id, startIndex = 0, total }) {
   const ids = (rows ?? []).map(rowKey);
   const allSelected = selection && ids.length > 0 && ids.every((id) => selection.selected.has(id));
+  const colSpan = columns.length + 2 + (selection ? 1 : 0);
   return (
     <div className="table-wrap">
       <table className="table">
@@ -115,7 +141,14 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
                 <input type="checkbox" aria-label="Select all on this page" checked={allSelected} onChange={() => selection.onToggleAll(ids, !allSelected)} />
               </th>
             )}
-            {columns.map((c) => <th key={c.key} style={{ width: c.width }}>{c.label}</th>)}
+            <th className="table__sno">S.NO.</th>
+            {columns.map((c) => (
+              <th key={c.key} style={{ width: c.width }}>
+                {c.label && c.key !== "_actions"
+                  ? <span className="th-inner">{c.label}<ChevronsUpDown size={12} className="th-sort" aria-hidden="true" /></span>
+                  : c.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -123,16 +156,17 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
             Array.from({ length: 6 }, (_, i) => (
               <tr key={i} className="table__skeleton">
                 {selection && <td />}
+                <td />
                 {columns.map((c) => <td key={c.key}><span className="skeleton" /></td>)}
               </tr>
             ))}
           {!loading && error && (
-            <tr><td colSpan={columns.length + (selection ? 1 : 0)}><div className="alert alert--error">{error.message}</div></td></tr>
+            <tr><td colSpan={colSpan}><div className="alert alert--error">{error.message}</div></td></tr>
           )}
           {!loading && !error && rows?.length === 0 && (
-            <tr><td colSpan={columns.length + (selection ? 1 : 0)}><EmptyState title={empty || "No records found"} /></td></tr>
+            <tr><td colSpan={colSpan}><EmptyState title={empty || "No records found"} /></td></tr>
           )}
-          {rows?.map((row) => {
+          {rows?.map((row, idx) => {
             const id = rowKey(row);
             return (
               <tr
@@ -147,6 +181,7 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
                     <input type="checkbox" aria-label="Select row" checked={selection.selected.has(id)} onChange={() => selection.onToggle(id)} />
                   </td>
                 )}
+                <td className="table__sno">{startIndex + idx + 1}</td>
                 {columns.map((c) => <td key={c.key} className={c.className}>{c.render ? c.render(row) : row[c.key] ?? "—"}</td>)}
               </tr>
             );
