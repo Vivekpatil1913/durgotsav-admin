@@ -1,14 +1,159 @@
 import {
   AlertTriangle, Award, CalendarDays, ChevronDown, ChevronUp,
-  ChevronsUpDown, Clock, Copy, Images, Inbox, Map, ShieldCheck, Upload,
+  ChevronsUpDown, Clock, Copy, Images, Inbox, ShieldCheck, Upload,
   Users, Video, XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BarChart, DataTable, HBarList, PageHeader, Pagination, StatCard } from "../components/ui.jsx";
+import { DataTable, HBarList, PageHeader, Pagination, StatCard } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useFetch } from "../hooks/useFetch.js";
-import { fmtNumber, PARTICIPANT_TYPES, timeAgo } from "../lib/format.js";
+import { fmtNumber, timeAgo } from "../lib/format.js";
+
+// ---------------------------------------------------------------- RegionDonut
+// Division share of registrations; click a division to drill into its districts.
+// Colours follow the entity (sorted by id), never its rank, so a slice keeps its
+// colour when counts change. Beyond 7 slices the rest fold into "Other".
+const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+const OTHER_COLOR = "#b3a899";
+const MAX_SLICES = 7;
+
+function RegistrationWeeklyChart({ data }) {
+  const weeks = [];
+  for (let i = 0; i < data.length; i += 7) {
+    const days = data.slice(i, i + 7);
+    weeks.push({ start: days[0]?.day, end: days.at(-1)?.day, count: days.reduce((sum, day) => sum + day.count, 0) });
+  }
+  const max = Math.max(1, ...weeks.map((week) => week.count));
+  const dateLabel = (value) => value
+    ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00`))
+    : "";
+
+  return (
+    <div className="registration-trend" role="img" aria-label="Registrations grouped by week for the last 30 days">
+      <div className="registration-trend__rows">
+        {weeks.map((week, index) => (
+          <div className="registration-trend__row" key={week.start ?? index}>
+            <span className="registration-trend__dates">{dateLabel(week.start)} – {dateLabel(week.end)}</span>
+            <span className="registration-trend__track" aria-hidden="true">
+              <span className="registration-trend__bar" style={{ width: `${week.count ? Math.max(3, (week.count / max) * 100) : 0}%` }} />
+            </span>
+            <strong className="registration-trend__count">{fmtNumber(week.count)}</strong>
+          </div>
+        ))}
+      </div>
+      <p className="registration-trend__key">Each bar shows registrations in that date range</p>
+    </div>
+  );
+}
+
+function toSlices(rows) {
+  const colourById = new Map([...rows].sort((a, b) => a.id - b.id).map((r, i) => [r.id, SERIES[i % SERIES.length]]));
+  const live = rows.filter((r) => r.total > 0).sort((a, b) => b.total - a.total);
+  const head = live.slice(0, MAX_SLICES).map((r) => ({ ...r, color: colourById.get(r.id) }));
+  const rest = live.slice(MAX_SLICES);
+  if (rest.length) {
+    head.push({ id: "other", name: `Other (${rest.length})`, total: rest.reduce((s, r) => s + r.total, 0), color: OTHER_COLOR, other: true });
+  }
+  return head;
+}
+
+function arcPath(cx, cy, r, ri, a0, a1) {
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  const p = (rad, a) => `${cx + rad * Math.sin(a)} ${cy - rad * Math.cos(a)}`;
+  return `M ${p(r, a0)} A ${r} ${r} 0 ${large} 1 ${p(r, a1)} L ${p(ri, a1)} A ${ri} ${ri} 0 ${large} 0 ${p(ri, a0)} Z`;
+}
+
+function RegionDonut() {
+  const [divisionId, setDivisionId] = useState(null);
+  const [hover, setHover] = useState(null);
+  const { data: divData } = useFetch("/admin/stats/divisions", { limit: 100 });
+  const { data: distData } = useFetch("/admin/stats/districts", { limit: 100 });
+  const divisions = divData?.data?.items;
+  const districts = distData?.data?.items;
+
+  const division = divisions?.find((d) => d.id === divisionId);
+  const rows = division
+    ? (districts ?? []).filter((d) => d.division_id === divisionId).map((d) => ({ id: d.id, name: d.district, total: d.total }))
+    : (divisions ?? []).map((d) => ({ id: d.id, name: d.division, total: d.total }));
+  const slices = toSlices(rows);
+  const sum = slices.reduce((s, x) => s + x.total, 0);
+  const loading = !divisions || (division && !districts);
+
+  const size = 200, c = size / 2, r = 96, ri = 64;
+  let angle = 0;
+  const arcs = slices.map((sl) => {
+    const a0 = angle;
+    angle += (sl.total / sum) * Math.PI * 2;
+    return { ...sl, a0, a1: angle };
+  });
+  const active = arcs.find((a) => a.id === hover);
+  const pct = (n) => (sum ? ((n / sum) * 100).toFixed(1) : "0.0");
+  const canDrill = (sl) => !division && !sl.other;
+  const drill = (sl) => { if (canDrill(sl)) { setDivisionId(sl.id); setHover(null); } };
+  const back = () => { setDivisionId(null); setHover(null); };
+
+  return (
+    <section className="panel">
+      <header className="panel__head">
+        <h2>Registrations by {division ? "district" : "division"}</h2>
+        {division && <button type="button" className="donut__back" onClick={back}>← All divisions</button>}
+      </header>
+      {division && <p className="donut__crumb"><span className="mr">{division.division}</span> · {division.name_en}</p>}
+
+      {loading ? (
+        <div className="skeleton" style={{ height: 200 }} />
+      ) : !sum ? (
+        <p className="muted">No registrations yet</p>
+      ) : (
+        <div className="donut">
+          <figure className="donut__figure">
+            <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Registrations by ${division ? "district" : "division"}`}>
+              {arcs.map((a) => {
+                const hit = {
+                  className: `donut__slice ${canDrill(a) ? "is-clickable" : ""} ${hover && a.id !== hover ? "is-dim" : ""}`,
+                  onMouseEnter: () => setHover(a.id),
+                  onMouseLeave: () => setHover(null),
+                  onClick: () => drill(a),
+                };
+                // A single slice is a full ring; an SVG arc can't draw 360°.
+                return arcs.length === 1
+                  ? <circle key={a.id} cx={c} cy={c} r={(r + ri) / 2} fill="none" stroke={a.color} strokeWidth={r - ri} {...hit} />
+                  : (
+                    <path key={a.id} d={arcPath(c, c, a.id === hover ? r + 3 : r, ri, a.a0, a.a1)} fill={a.color} {...hit}>
+                      <title>{`${a.name}: ${fmtNumber(a.total)} (${pct(a.total)}%)`}</title>
+                    </path>
+                  );
+              })}
+            </svg>
+            <figcaption className="donut__center" aria-live="polite">
+              <strong>{fmtNumber(active ? active.total : sum)}</strong>
+              <span className="mr">{active ? active.name : "Total"}</span>
+              {active && <small>{pct(active.total)}%</small>}
+            </figcaption>
+          </figure>
+
+          <ul className="donut__legend">
+            {arcs.map((a) => (
+              <li key={a.id} className={hover && a.id !== hover ? "is-dim" : ""}>
+                <button type="button" disabled={!canDrill(a)}
+                  onMouseEnter={() => setHover(a.id)} onMouseLeave={() => setHover(null)}
+                  onFocus={() => setHover(a.id)} onBlur={() => setHover(null)} onClick={() => drill(a)}
+                  title={canDrill(a) ? "Show districts" : undefined}>
+                  <span className="donut__swatch" style={{ background: a.color }} aria-hidden="true" />
+                  <span className="donut__name mr">{a.name}</span>
+                  <span className="donut__val">{fmtNumber(a.total)}</span>
+                  <span className="donut__pct">{pct(a.total)}%</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!division && <p className="donut__hint">Click a division to see its districts</p>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ---------------------------------------------------------------- DivisionStatsPanel
 const DIVISION_PAGE_SIZE = 10;
@@ -272,6 +417,7 @@ export default function Dashboard() {
   const { data, loading, error } = useFetch("/admin/stats/dashboard");
   const d = data?.data;
   const t = d?.totals ?? {};
+  const daily = d?.daily ?? [];
 
   // Districts list reused for the city filter dropdown (long-lived data, separate fetch)
   const { data: distData } = useFetch("/admin/stats/districts", { limit: 50 });
@@ -355,19 +501,14 @@ export default function Dashboard() {
 
       {/* ---- Charts / quick panels ---- */}
       <div className="dash-grid">
-        <section className="panel panel--span2">
-          <header className="panel__head"><h2>Registrations · last 30 days</h2></header>
+        <section className="panel panel--span2 panel--chart">
+          <header className="panel__head"><h2>Registrations by week · last 30 days</h2></header>
           {d
-            ? <BarChart data={d.daily} label="Registrations per day for the last 30 days" />
+            ? <RegistrationWeeklyChart data={daily} />
             : <div className="skeleton" style={{ height: 180 }} />}
         </section>
 
-        <section className="panel">
-          <header className="panel__head"><h2>By participant type</h2></header>
-          {d && (d.by_type.length
-            ? <HBarList items={d.by_type.map((x) => ({ name: PARTICIPANT_TYPES[x.type] ?? x.type, count: x.count }))} />
-            : <p className="muted">No data yet</p>)}
-        </section>
+        <RegionDonut />
 
         <section className="panel">
           <header className="panel__head"><h2>Top districts</h2><Link to="/districts">All →</Link></header>
