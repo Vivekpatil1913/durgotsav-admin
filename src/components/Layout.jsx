@@ -1,6 +1,6 @@
 import {
   Award, BarChart3, ExternalLink, FileText, Globe, HelpCircle, Images,
-  Headphones, Inbox, KeyRound, LayoutDashboard, LogOut, Map, Menu, MessageSquareQuote,
+  Headphones, Inbox, KeyRound, LayoutDashboard, LogOut, Map, Menu, MessageSquareQuote, PanelLeftClose, PanelLeftOpen,
   ScrollText, Settings, ShieldCheck, Users, UserCog, X, ShieldOff,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -66,6 +66,13 @@ export function Layout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   useEffect(() => setOpen(false), [pathname]);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebar-collapsed") === "1"; } catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed((c) => {
+    try { localStorage.setItem("sidebar-collapsed", c ? "0" : "1"); } catch { /* ignore */ }
+    return !c;
+  });
 
   const groups = NAV
     .filter((g) => {
@@ -79,7 +86,7 @@ export function Layout() {
     .filter((g) => g.items.length);
 
   return (
-    <div className={`shell ${open ? "is-nav-open" : ""}`}>
+    <div className={`shell ${open ? "is-nav-open" : ""} ${collapsed ? "is-collapsed" : ""}`}>
       <a href="#content" className="skip-link">Skip to content</a>
       <aside className="sidebar" aria-label="Main navigation">
         <div className="sidebar__brand">
@@ -97,7 +104,7 @@ export function Layout() {
             <div key={g.group} className="sidebar__group">
               <span className="sidebar__group-label">{g.group}</span>
               {g.items.map(({ to, label, icon: Icon, end }) => (
-                <NavLink key={to} to={to} end={end} className="sidebar__link">
+                <NavLink key={to} to={to} end={end} className="sidebar__link" title={collapsed ? label : undefined}>
                   <Icon size={17} aria-hidden="true" />
                   <span>{label}</span>
                 </NavLink>
@@ -105,8 +112,8 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        <a className="sidebar__site" href={SITE_URL} target="_blank" rel="noopener noreferrer">
-          <ExternalLink size={15} aria-hidden="true" /> View public website
+        <a className="sidebar__site" href={SITE_URL} target="_blank" rel="noopener noreferrer" title={collapsed ? "View public website" : undefined}>
+          <ExternalLink size={15} aria-hidden="true" /> <span>View public website</span>
         </a>
       </aside>
       <div className="sidebar-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
@@ -115,6 +122,16 @@ export function Layout() {
         <header className="topbar">
           <button type="button" className="icon-btn topbar__menu" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu size={20} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn topbar__collapse"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-pressed={collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
           </button>
           <div className="topbar__spacer" />
           <details className="profile">

@@ -548,13 +548,38 @@ select.input {
   flex-direction: column;
   height: 100vh;
   padding: 16px 12px;
-  overflow-y: auto;
+  overflow: hidden;
   background:
     radial-gradient(120% 40% at 0% 0%, rgb(194 100 28 / 0.22), transparent 70%),
     var(--night);
   color: #e9dcc8;
 }
+/* thin, low-contrast scrollbar on the dark sidebar nav */
+.sidebar__nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.14) transparent;
+}
+.sidebar__nav:hover {
+  scrollbar-color: rgb(242 177 58 / 0.4) transparent;
+}
+.sidebar__nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar__nav::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14);
+  border-radius: 999px;
+}
+.sidebar__nav:hover::-webkit-scrollbar-thumb {
+  background: rgb(242 177 58 / 0.4);
+}
+.sidebar__nav::-webkit-scrollbar-button {
+  display: none;
+}
 .sidebar__brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -580,6 +605,11 @@ select.input {
 }
 .sidebar__nav {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: -4px;
+  padding-inline: 4px;
 }
 .sidebar__group {
   display: grid;
@@ -619,6 +649,8 @@ select.input {
   color: var(--gold);
 }
 .sidebar__site {
+  flex-shrink: 0;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -656,6 +688,35 @@ select.input {
 }
 .topbar__menu {
   display: none;
+}
+.shell {
+  transition: grid-template-columns 220ms ease;
+}
+.is-collapsed {
+  --sidebar-w: 76px;
+}
+.is-collapsed .sidebar__brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+.is-collapsed .sidebar__brand > div,
+.is-collapsed .sidebar__link > span,
+.is-collapsed .sidebar__site > span {
+  display: none;
+}
+.is-collapsed .sidebar__group-label {
+  display: block;
+  height: 1px;
+  padding: 0;
+  margin: 0 10px 8px;
+  overflow: hidden;
+  font-size: 0;
+  background: rgb(255 255 255 / 0.1);
+}
+.is-collapsed .sidebar__link,
+.is-collapsed .sidebar__site {
+  justify-content: center;
+  padding-inline: 0;
 }
 .topbar__spacer {
   flex: 1;
@@ -773,6 +834,31 @@ select.input {
   .sidebar__close,
   .topbar__menu {
     display: inline-grid;
+  }
+  .topbar__collapse {
+    display: none;
+  }
+  /* collapse only applies on desktop; mobile keeps the full drawer */
+  .is-collapsed .sidebar__brand > div,
+  .is-collapsed .sidebar__link > span,
+  .is-collapsed .sidebar__site > span {
+    display: revert;
+  }
+  .is-collapsed .sidebar__brand {
+    justify-content: flex-start;
+    padding-inline: 8px;
+  }
+  .is-collapsed .sidebar__link,
+  .is-collapsed .sidebar__site {
+    justify-content: flex-start;
+    padding-inline: 10px;
+  }
+  .is-collapsed .sidebar__group-label {
+    height: auto;
+    margin: 0;
+    padding: 0 10px 6px;
+    font-size: 10.5px;
+    background: none;
   }
   .topbar,
   .content {
