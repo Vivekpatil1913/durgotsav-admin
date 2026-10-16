@@ -489,7 +489,7 @@ export default function Dashboard() {
         <StatCard
           label="Gallery photos" icon={Images}
           value={t.gallery_photos}
-          onClick={() => navigate("/registrations?featured=true")}
+          onClick={() => navigate("/website-gallery")}
         />
         <StatCard
           label="New enquiries" icon={Inbox}

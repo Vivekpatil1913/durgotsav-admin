@@ -83,7 +83,9 @@ export function Drawer({ open, onClose, title, children, footer, wide }) {
 
 export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100], jump = true }) {
   if (!meta) return null;
-  const { page, totalPages, total, limit } = meta;
+  // `capped`: the server stopped counting at `total` (more matches exist than can be browsed)
+  const { page, totalPages, total, limit, capped } = meta;
+  const more = capped ? "+" : "";
   const from = total ? (page - 1) * limit + 1 : 0;
   const to = Math.min(total, page * limit);
 
@@ -94,7 +96,7 @@ export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100]
 
   return (
     <div className="pagination">
-      <span className="pagination__info">Showing <strong>{fmtNumber(from)}–{fmtNumber(to)}</strong> of <strong>{fmtNumber(total)}</strong> records</span>
+      <span className="pagination__info">Showing <strong>{fmtNumber(from)}–{fmtNumber(to)}</strong> of <strong>{fmtNumber(total)}{more}</strong> records</span>
       <div className="pagination__nav">
         {onLimit && (
           <select className="input pagination__limit" value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Rows per page">
@@ -115,7 +117,7 @@ export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100]
             onBlur={handleJump}
             onKeyDown={(e) => e.key === "Enter" && handleJump(e)}
           /> : <strong>{fmtNumber(page)}</strong>}
-          {" "}of {fmtNumber(totalPages)}
+          {" "}of {fmtNumber(totalPages)}{more}
         </span>
         <button type="button" className="btn btn--outline btn--sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Next <ChevronRight size={14} /></button>
       </div>

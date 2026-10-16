@@ -1,7 +1,7 @@
 import {
   Award, BarChart3, ExternalLink, FileText, Globe, HelpCircle, Images,
   Headphones, Inbox, KeyRound, LayoutDashboard, LogOut, Map, Menu, MessageSquareQuote, PanelLeftClose, PanelLeftOpen,
-  ScrollText, Settings, ShieldCheck, Users, UserCog, X, ShieldOff,
+  ScrollText, Settings, ShieldCheck, Users, UserCog, X, ShieldOff, Trophy, ListChecks, Landmark, SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
@@ -27,6 +27,16 @@ export const NAV = [
     ],
   },
   {
+    group: "शिवदुर्ग भूषण पुरस्कार २०२६",
+    items: [
+      { to: "/shivdurg-award", label: "Award dashboard", icon: Trophy, end: true, perm: ["shivdurg_award"] },
+      { to: "/shivdurg-award/nominations", label: "Nominations", icon: ListChecks, perm: ["shivdurg_award"] },
+      { to: "/shivdurg-award/settings", label: "Award settings", icon: SlidersHorizontal, perm: ["shivdurg_award_config"] },
+      // { to: "/content/award-committee", label: "Committee", icon: Landmark, perm: ["shivdurg_award_config"] },
+      { to: "/content/award-winners", label: "Previous winners", icon: Award, perm: ["shivdurg_award_config"] },
+    ],
+  },
+  {
     group: "Geography",
     perm: ["geography"],
     items: [
@@ -37,13 +47,13 @@ export const NAV = [
   },
   {
     group: "Content",
-    perm: ["forts"],   // if admin can see forts, show the whole Content group
     items: [
-      { to: "/content/forts",          label: "Forts",            icon: Map              },
-      { to: "/content/testimonials",   label: "Testimonials",     icon: MessageSquareQuote },
-      { to: "/content/podcasts",       label: "Podcasts",         icon: Headphones       },
-      { to: "/content/faqs",           label: "FAQs",             icon: HelpCircle       },
-      { to: "/content/pages",          label: "Pages",            icon: FileText         },
+      { to: "/website-gallery",        label: "Website Gallery",  icon: Images,             perm: ["website_gallery"] },
+      { to: "/content/forts",          label: "Forts",            icon: Map,                perm: ["forts"]           },
+      { to: "/content/testimonials",   label: "Testimonials",     icon: MessageSquareQuote, perm: ["content"]         },
+      { to: "/content/podcasts",       label: "Podcasts",         icon: Headphones,         perm: ["content"]         },
+      { to: "/content/faqs",           label: "FAQs",             icon: HelpCircle,         perm: ["content"]         },
+      { to: "/content/pages",          label: "Pages",            icon: FileText,           perm: ["content"]         },
     ],
   },
   {
@@ -102,7 +112,7 @@ export function Layout() {
         <nav className="sidebar__nav">
           {groups.map((g) => (
             <div key={g.group} className="sidebar__group">
-              <span className="sidebar__group-label">{g.group}</span>
+              <span className="sidebar__group-label" lang={/[ऀ-ॿ]/.test(g.group) ? "mr" : undefined}>{g.group}</span>
               {g.items.map(({ to, label, icon: Icon, end }) => (
                 <NavLink key={to} to={to} end={end} className="sidebar__link" title={collapsed ? label : undefined}>
                   <Icon size={17} aria-hidden="true" />

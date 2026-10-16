@@ -59,10 +59,12 @@ export function AuthProvider({ children }) {
     return false;
   }, [admin]);
 
-  // "Explicit" permissions (e.g. moderation_bulk) are NOT auto-granted by is_admin — read the role JSONB.
-  // Mirrors the server-side checkExplicitPermission().
+  // "Explicit" permissions (e.g. moderation_bulk, website_gallery_bulk) read the role JSONB;
+  // is_admin defaults to granted unless explicitly turned off on the Roles page.
   const hasExplicitPermission = useCallback(
-    (moduleKey) => Boolean(admin?.role_permissions?.[moduleKey]?.read),
+    (moduleKey) => Boolean(
+      admin?.role_permissions?.[moduleKey]?.read ?? admin?.is_admin
+    ),
     [admin],
   );
 

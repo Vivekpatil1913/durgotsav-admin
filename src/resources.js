@@ -7,6 +7,54 @@ const active = { key: "is_active", label: "Active (visible on site)", type: "boo
 const order = { key: "sort_order", label: "Display order", type: "number", default: 0, hint: "Lower numbers appear first" };
 
 export const RESOURCES = {
+  // शिवदुर्ग भूषण पुरस्कार — access by permission (shivdurg_award_config), not by legacy role
+  "award-committee": {
+    title: "Award committee",
+    singular: "committee member",
+    endpoint: "/admin/shivdurg-award/committee",
+    perm: ["shivdurg_award_config", "read"],
+    crumbs: ["शिवदुर्ग भूषण पुरस्कार २०२६"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    columns: [
+      { key: "name", label: "Member", sub: "name_en", mr: true },
+      { key: "designation", label: "Designation", mr: true },
+      { key: "is_active", label: "Shown on site", type: "bool" },
+    ],
+    fields: [
+      { key: "name", label: "Name (Marathi)", required: true, mr: true },
+      { key: "name_en", label: "Name (English)" },
+      { key: "designation", label: "Designation / role (Marathi)", type: "textarea", mr: true, rows: 2 },
+      { key: "designation_en", label: "Designation / role (English)", type: "textarea", rows: 2 },
+      order,
+      active,
+    ],
+  },
+  "award-winners": {
+    title: "Previous award winners",
+    singular: "winner",
+    endpoint: "/admin/shivdurg-award/winners",
+    perm: ["shivdurg_award_config", "read"],
+    crumbs: ["शिवदुर्ग भूषण पुरस्कार २०२६"],
+    can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
+    columns: [
+      { key: "photo", type: "image" },
+      { key: "name", label: "Winner", sub: "name_en", mr: true },
+      { key: "category", label: "Category" },
+      { key: "year", label: "Year" },
+      { key: "is_active", label: "Shown on site", type: "bool" },
+    ],
+    fields: [
+      { key: "name", label: "Name — person / organization (Marathi)", required: true, mr: true },
+      { key: "name_en", label: "Name (English)" },
+      { key: "category", label: "Category", type: "select", required: true, default: "individual", options: [["individual", "Individual (व्यक्तिगत विभाग)"], ["organization", "Organization (संस्थात्मक विभाग)"]] },
+      { key: "year", label: "Award year", type: "number", hint: "Leave empty if not known" },
+      { key: "description", label: "Short description (Marathi)", type: "textarea", mr: true, rows: 3 },
+      { key: "description_en", label: "Short description (English)", type: "textarea", rows: 3 },
+      { key: "photo", label: "Photo", type: "image", folder: "awards" },
+      order,
+      active,
+    ],
+  },
   divisions: {
     title: "Divisions",
     singular: "division",

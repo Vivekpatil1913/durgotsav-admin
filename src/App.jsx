@@ -18,6 +18,11 @@ const AuditLogs     = lazy(() => import("./pages/AuditLogs.jsx"));
 const Profile       = lazy(() => import("./pages/Profile.jsx"));
 const Roles         = lazy(() => import("./pages/Roles.jsx"));
 const Users         = lazy(() => import("./pages/Users.jsx"));
+const AwardDashboard = lazy(() => import("./pages/award/AwardDashboard.jsx"));
+const AwardNominations = lazy(() => import("./pages/award/AwardNominations.jsx"));
+const AwardNominationDetail = lazy(() => import("./pages/award/AwardNominationDetail.jsx"));
+const AwardSettings = lazy(() => import("./pages/award/AwardSettings.jsx"));
+const WebsiteGallery = lazy(() => import("./pages/WebsiteGallery.jsx"));
 
 function Loading() {
   return <div className="page-loading"><Spinner size={22} /></div>;
@@ -53,7 +58,16 @@ export default function App() {
                 <Route path="certificates"  element={<Certificates />} />
                 <Route path="districts"     element={<Districts />} />
                 <Route path="city-stats"    element={<CityStats />} />
+                <Route path="website-gallery" element={
+                  <Protected perm={["website_gallery", "read"]}><WebsiteGallery /></Protected>
+                } />
                 <Route path="content/:resource" element={<ResourcePage />} />
+
+                {/* शिवदुर्ग भूषण पुरस्कार २०२६ */}
+                <Route path="shivdurg-award" element={<Protected perm={["shivdurg_award", "read"]}><AwardDashboard /></Protected>} />
+                <Route path="shivdurg-award/nominations" element={<Protected perm={["shivdurg_award", "read"]}><AwardNominations /></Protected>} />
+                <Route path="shivdurg-award/nominations/:id" element={<Protected perm={["shivdurg_award", "read"]}><AwardNominationDetail /></Protected>} />
+                <Route path="shivdurg-award/settings" element={<Protected perm={["shivdurg_award_config", "read"]}><AwardSettings /></Protected>} />
 
                 {/* RBAC management — requires roles/users permissions */}
                 <Route path="roles" element={

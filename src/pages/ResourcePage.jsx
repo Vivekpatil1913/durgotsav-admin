@@ -32,7 +32,7 @@ function cell(col, row) {
 export default function ResourcePage() {
   const { resource } = useParams();
   const cfg = RESOURCES[resource];
-  const { can } = useAuth();
+  const { can, hasPermission } = useAuth();
   const { toast, confirm } = useUi();
   const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", limit: "25", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
   const [search, setSearch] = useState(f.q);
@@ -68,7 +68,7 @@ export default function ResourcePage() {
 
   const { data, loading, error, reload } = useFetch(cfg ? cfg.endpoint : null, clean({ ...f }));
   if (!cfg) return <Navigate to="/" replace />;
-  if (!can(...cfg.roles)) return <div className="alert alert--error">You do not have access to {cfg.title}.</div>;
+  if (cfg.perm ? !hasPermission(...cfg.perm) : !can(...cfg.roles)) return <div className="alert alert--error">You do not have access to {cfg.title}.</div>;
 
   const rows = data?.data ?? [];
   const trashed = f.trashed === "true";
@@ -138,7 +138,7 @@ export default function ResourcePage() {
 
   return (
     <>
-      <PageHeader title={cfg.title} crumbs={[resource === "enquiries" ? "Inbox" : resource === "admins" ? "System" : "Content"]}
+      <PageHeader title={cfg.title} crumbs={cfg.crumbs ?? [resource === "enquiries" ? "Inbox" : resource === "admins" ? "System" : "Content"]}
         actions={cfg.can.create && !trashed && <button type="button" className="btn btn--primary" onClick={() => open(null)}><Plus size={16} /> New {cfg.singular}</button>} />
 
       {(!cfg.noTrash && cfg.can.restore) && (

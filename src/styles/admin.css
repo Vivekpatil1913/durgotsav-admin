@@ -971,6 +971,14 @@ select.input {
 .search .input {
   padding-left: 34px;
 }
+.search__hint {
+  position: absolute;
+  top: 100%;
+  left: 4px;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
 .segmented {
   display: inline-flex;
   padding: 3px;
@@ -1561,6 +1569,52 @@ button.stat-card:hover {
   color: #fff;
   font-size: 11px;
   font-weight: 700;
+}
+.photo-card__badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.photo-card__badge--live {
+  background: var(--success, #1baf7a);
+  color: #fff;
+}
+.photo-card__badge--off {
+  background: rgba(30, 25, 20, 0.75);
+  color: #e6dfd5;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+}
+.photo-card.is-featured {
+  border-color: rgba(27, 175, 122, 0.45);
+  box-shadow: 0 0 0 1px rgba(27, 175, 122, 0.3), var(--shadow, 0 1px 3px rgba(0,0,0,0.1));
+}
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--surface-sunken, #ede7de);
+  color: var(--text-2, #6b6256);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.resource-tab.is-active .tab-badge {
+  background: var(--brand, #b83d1b);
+  color: #fff;
 }
 .photo-card__img {
   position: relative;
@@ -2282,4 +2336,170 @@ path.donut__slice {
   font-size: 11.5px;
   color: var(--text-3);
   text-align: center;
+}
+
+/* ================================================================ शिवदुर्ग भूषण पुरस्कार २०२६ */
+/* Devanagari must not be letter-spaced or upper-cased (it breaks conjuncts) */
+.sidebar__group-label:lang(mr) {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #f2b13a;
+}
+.award-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.award-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--gold-50, #fff7e6);
+  border: 1px solid #f0d9ac;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.award-tag--more {
+  background: #f3f6fb;
+  border-color: var(--border);
+}
+.award-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+.award-detail__main,
+.award-detail__side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.award-detail__side {
+  position: sticky;
+  top: 76px;
+}
+@media (max-width: 1100px) {
+  .award-detail {
+    grid-template-columns: 1fr;
+  }
+  .award-detail__side {
+    position: static;
+    order: -1;
+  }
+}
+.award-section .panel__head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.award-kv div {
+  grid-template-columns: minmax(130px, 200px) 1fr;
+}
+@media (max-width: 560px) {
+  .award-kv div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+.award-pre {
+  white-space: pre-line;
+}
+.award-subtitle {
+  margin: 16px 0 8px;
+  font-size: 14px;
+}
+.award-mini-table td {
+  vertical-align: top;
+  font-size: 13px;
+}
+.award-docs {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.award-docs li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.award-docs li > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--brand);
+}
+.award-docs__body {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 200px;
+}
+.award-docs__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  word-break: break-all;
+}
+.award-status-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.award-feed,
+.award-history {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.award-feed li {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: #faf7f2;
+}
+.award-feed p,
+.award-history p {
+  margin: 0 0 4px;
+}
+.award-history li {
+  display: flex;
+  gap: 10px;
+}
+.award-history__dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 4px rgb(194 100 28 / 0.15);
+}
+.award-faq-edit {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+.award-faq-edit__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .award-faq-edit__row {
+    grid-template-columns: 1fr auto;
+  }
+  .award-faq-edit__row textarea {
+    grid-column: 1;
+  }
 }
