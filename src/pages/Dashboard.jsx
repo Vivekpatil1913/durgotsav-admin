@@ -6,6 +6,7 @@ import {
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DataTable, HBarList, PageHeader, Pagination, StatCard } from "../components/ui.jsx";
+import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useFetch } from "../hooks/useFetch.js";
 import { fmtNumber, timeAgo } from "../lib/format.js";
@@ -427,7 +428,7 @@ export default function Dashboard() {
     <>
       <PageHeader
         title={`Welcome, ${admin.name.split(" ")[0]}`}
-        subtitle="Live overview of Durgotsav 2026 participation."
+        subtitle={`Live overview of Durgotsav ${EDITION_YEAR} participation.`}
         actions={
           <Link to="/moderation" className="btn btn--primary">
             <ShieldCheck size={16} /> Review photos {t.pending ? `(${fmtNumber(t.pending)})` : ""}

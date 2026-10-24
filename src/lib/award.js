@@ -1,5 +1,7 @@
-// शिवदुर्ग भूषण पुरस्कार २०२६ — shared admin helpers
-export const AWARD_SECTION = "शिवदुर्ग भूषण पुरस्कार २०२६";
+import { EDITION_YEAR_MR } from "../config/edition.js";
+
+// शिवदुर्ग भूषण पुरस्कार — shared admin helpers
+export const AWARD_SECTION = `शिवदुर्ग भूषण पुरस्कार ${EDITION_YEAR_MR}`;
 export const AWARD_BASE = "/shivdurg-award";
 
 export const AWARD_STATUS = {

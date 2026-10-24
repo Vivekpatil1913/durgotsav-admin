@@ -63,7 +63,7 @@ export default function App() {
                 } />
                 <Route path="content/:resource" element={<ResourcePage />} />
 
-                {/* शिवदुर्ग भूषण पुरस्कार २०२६ */}
+                {/* शिवदुर्ग भूषण पुरस्कार */}
                 <Route path="shivdurg-award" element={<Protected perm={["shivdurg_award", "read"]}><AwardDashboard /></Protected>} />
                 <Route path="shivdurg-award/nominations" element={<Protected perm={["shivdurg_award", "read"]}><AwardNominations /></Protected>} />
                 <Route path="shivdurg-award/nominations/:id" element={<Protected perm={["shivdurg_award", "read"]}><AwardNominationDetail /></Protected>} />

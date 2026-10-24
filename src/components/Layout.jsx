@@ -1,12 +1,14 @@
 import {
-  Award, BarChart3, ExternalLink, FileText, Globe, HelpCircle, Images,
+  AlertTriangle, Award, BarChart3, ExternalLink, FileText, Globe, HelpCircle, Images,
   Headphones, Inbox, KeyRound, LayoutDashboard, LogOut, Map, Menu, MessageSquareQuote, PanelLeftClose, PanelLeftOpen,
   ScrollText, Settings, ShieldCheck, Users, UserCog, X, ShieldOff, Trophy, ListChecks, Landmark, SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { SITE_URL } from "../lib/api.js";
+import { api, SITE_URL } from "../lib/api.js";
+import { AWARD_SECTION } from "../lib/award.js";
 import { ROLES } from "../lib/format.js";
 
 // Navigation definition.
@@ -27,7 +29,7 @@ export const NAV = [
     ],
   },
   {
-    group: "शिवदुर्ग भूषण पुरस्कार २०२६",
+    group: AWARD_SECTION,
     items: [
       { to: "/shivdurg-award", label: "Award dashboard", icon: Trophy, end: true, perm: ["shivdurg_award"] },
       { to: "/shivdurg-award/nominations", label: "Nominations", icon: ListChecks, perm: ["shivdurg_award"] },
@@ -76,6 +78,11 @@ export function Layout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   useEffect(() => setOpen(false), [pathname]);
+  // The API reports the edition it runs; a different year means one of the three apps was not updated
+  const [apiYear, setApiYear] = useState(null);
+  useEffect(() => {
+    api.get("/settings").then((r) => setApiYear(r.data.data?.edition_year ?? null)).catch(() => {});
+  }, []);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "1"; } catch { return false; }
   });
@@ -102,7 +109,7 @@ export function Layout() {
         <div className="sidebar__brand">
           <img src="/logo.webp" alt="" width="40" height="40" />
           <div>
-            <strong>Durgotsav 2026</strong>
+            <strong>Durgotsav {EDITION_YEAR}</strong>
             <span>Admin console</span>
           </div>
           <button type="button" className="icon-btn sidebar__close" onClick={() => setOpen(false)} aria-label="Close menu">
@@ -160,10 +167,16 @@ export function Layout() {
           </details>
         </header>
         <main id="content" className="content" tabIndex={-1}>
+          {apiYear && apiYear !== EDITION_YEAR && (
+            <div className="alert alert--warning" role="alert">
+              <AlertTriangle size={16} aria-hidden="true" /> This admin console is set to {EDITION_YEAR} but the API runs {apiYear}.
+              Set the same EDITION_YEAR in src/config/edition.js of the admin console, API and website, then redeploy.
+            </div>
+          )}
           <Outlet />
         </main>
         <footer className="main__foot">
-          <Images size={13} aria-hidden="true" /> Amrut Durgotsav 2026 · AMRUT, Pune
+          <Images size={13} aria-hidden="true" /> Amrut Durgotsav {EDITION_YEAR} · AMRUT, Pune
         </footer>
       </div>
     </div>

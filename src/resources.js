@@ -1,6 +1,7 @@
 // Declarative CMS resources rendered by pages/ResourcePage.jsx.
 // field types: text | textarea | markdown | number | date | datetime | select | apiselect | boolean | image | facts | password | readonly
 // apiselect: fetches options from `optionsEndpoint`; maps items to [id, name_en||name_mr]
+import { AWARD_SECTION } from "./lib/award.js";
 import { ROLES } from "./lib/format.js";
 
 const active = { key: "is_active", label: "Active (visible on site)", type: "boolean", default: true };
@@ -13,7 +14,7 @@ export const RESOURCES = {
     singular: "committee member",
     endpoint: "/admin/shivdurg-award/committee",
     perm: ["shivdurg_award_config", "read"],
-    crumbs: ["शिवदुर्ग भूषण पुरस्कार २०२६"],
+    crumbs: [AWARD_SECTION],
     can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
     columns: [
       { key: "name", label: "Member", sub: "name_en", mr: true },
@@ -34,7 +35,7 @@ export const RESOURCES = {
     singular: "winner",
     endpoint: "/admin/shivdurg-award/winners",
     perm: ["shivdurg_award_config", "read"],
-    crumbs: ["शिवदुर्ग भूषण पुरस्कार २०२६"],
+    crumbs: [AWARD_SECTION],
     can: { create: true, toggle: true, delete: true, restore: true, reorder: true },
     columns: [
       { key: "photo", type: "image" },

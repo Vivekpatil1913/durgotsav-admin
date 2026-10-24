@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { BulkBar } from "../components/BulkBar.jsx";
 import { RegistrationDrawer } from "../components/RegistrationDrawer.jsx";
 import { Badge, DataTable, PageHeader, Pagination, useSelection } from "../components/ui.jsx";
+import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
@@ -55,7 +56,7 @@ export default function Registrations() {
 
   async function exportCsv() {
     try {
-      await downloadFile("/admin/registrations/export.csv", clean({ ...f, page: undefined }), "durgotsav-2026-registrations.csv");
+      await downloadFile("/admin/registrations/export.csv", clean({ ...f, page: undefined }), `durgotsav-${EDITION_YEAR}-registrations.csv`);
     } catch (err) {
       toast(apiError(err).message, "error");
     }

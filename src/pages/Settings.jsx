@@ -1,6 +1,7 @@
 import { AlertTriangle, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Field, ImageUpload, PageHeader, Spinner } from "../components/ui.jsx";
+import { EDITION_YEAR } from "../config/edition.js";
 import { useUi } from "../context/UiContext.jsx";
 import { api, apiError } from "../lib/api.js";
 import { fmtDateTime } from "../lib/format.js";
@@ -12,6 +13,11 @@ const toIstInput = (iso) => {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 };
 const fromIstInput = (v) => (v ? `${v}:00+05:30` : "");
+const istDay = (iso) => toIstInput(iso).slice(0, 10);
+// A date outside the edition year is usually last year's value left unchanged
+const offEdition = (...values) => values.some((v) => v && Number(istDay(v).slice(0, 4)) !== EDITION_YEAR);
+// The public site shows {year} as the edition year, so such text needs no yearly edits
+const YEAR_HINT = `Write {year} for the edition year (${EDITION_YEAR}) — it updates by itself next year`;
 
 const SECTIONS = [
   {
@@ -23,12 +29,20 @@ const SECTIONS = [
       ["note", "Notice shown when registration is closed", "textarea"],
     ],
   },
-  { key: "hero", title: "Home page hero", fields: [["eyebrow", "Eyebrow"], ["title", "Title"], ["subtitle", "Subtitle", "textarea"], ["image", "Background image", "image"]] },
+  {
+    key: "important_dates", title: "Important dates", desc: "Dates on the home page timeline cards. Display only — the Registration window above is what opens and closes the form.",
+    fields: [
+      ["festival_begins", "Durgotsav Shubharambh (festival begins)", "date"],
+      ["upload_opens", "Photo upload start", "date"],
+      ["upload_closes", "Photo upload deadline", "date"],
+    ],
+  },
+  { key: "hero", title: "Home page hero", fields: [["eyebrow", "Eyebrow"], ["title", "Title", "text", YEAR_HINT], ["subtitle", "Subtitle", "textarea"], ["image", "Background image", "image"]] },
   { key: "initiative", title: "Initiative details", fields: [["unesco_title", "UNESCO serial nomination title"], ["gr_reference", "Government resolution reference (मराठी)", "textarea"], ["gr_reference_en", "Government resolution reference (English)", "textarea"]] },
-  { key: "world_record", title: "World record section", fields: [["enabled", "Show section", "boolean"], ["eyebrow", "Eyebrow"], ["title", "Title"], ["body", "Text", "textarea"], ["image", "Image", "image"]] },
+  { key: "world_record", title: "World record section", fields: [["enabled", "Show section", "boolean"], ["eyebrow", "Eyebrow"], ["title", "Title"], ["body", "Text", "textarea", YEAR_HINT], ["image", "Image", "image"]] },
   { key: "contact", title: "Contact & helpline", fields: [["email", "Email"], ["phone", "Phone"], ["whatsapp", "WhatsApp number", "text", "Digits with country code, e.g. 919112226154"], ["hours", "Helpline hours"], ["address", "Address (मराठी)", "textarea"], ["address_en", "Address (English)", "textarea"]] },
   { key: "social", title: "Social links", fields: [["instagram", "Instagram URL"], ["youtube", "YouTube URL"], ["facebook", "Facebook URL"], ["linkedin", "LinkedIn URL"], ["google", "Google profile URL"], ["x", "X / Twitter URL"]] },
-  { key: "seo", title: "SEO defaults", fields: [["site_name", "Site name"], ["default_title", "Default page title"], ["default_description", "Default meta description", "textarea"], ["og_image", "Social share image", "image"]] },
+  { key: "seo", title: "SEO defaults", fields: [["site_name", "Site name", "text", YEAR_HINT], ["default_title", "Default page title", "text", YEAR_HINT], ["default_description", "Default meta description", "textarea"], ["og_image", "Social share image", "image"]] },
 ];
 
 export default function Settings() {
@@ -61,7 +75,9 @@ export default function Settings() {
 
   if (!values) return <div className="page-loading"><Spinner size={22} /></div>;
   const reg = values.registration ?? {};
-  const closesYear = reg.closes_at ? new Date(reg.closes_at).getFullYear() : null;
+  const dates = values.important_dates ?? {};
+  const datesMismatch = Boolean(reg.opens_at && reg.closes_at && dates.upload_opens && dates.upload_closes)
+    && (istDay(reg.opens_at) !== dates.upload_opens || istDay(reg.closes_at) !== dates.upload_closes);
 
   return (
     <>
@@ -76,10 +92,16 @@ export default function Settings() {
               </div>
               <button type="button" className="btn btn--primary btn--sm" onClick={() => save(sec.key)} disabled={saving === sec.key}>{saving === sec.key ? <Spinner /> : <Save size={14} />} Save</button>
             </header>
-            {sec.key === "registration" && closesYear === 2027 && (
-              <div className="alert alert--warning"><AlertTriangle size={16} /> Closing date is in 2027 exactly as printed in परिशिष्ट-अ (२५ नोव्हेंबर २०२७). Please confirm — it may be a typo for 2026.</div>
+            {sec.key === "registration" && offEdition(reg.opens_at, reg.closes_at) && (
+              <div className="alert alert--warning"><AlertTriangle size={16} /> The registration window is not in {EDITION_YEAR}, the current edition. Please check the dates.</div>
             )}
             {sec.key === "registration" && reg.opens_at && <p className="muted small">Currently: opens {fmtDateTime(reg.opens_at)}, closes {fmtDateTime(reg.closes_at)}</p>}
+            {sec.key === "important_dates" && offEdition(dates.festival_begins, dates.upload_opens, dates.upload_closes) && (
+              <div className="alert alert--warning"><AlertTriangle size={16} /> Some dates are not in {EDITION_YEAR}, the current edition. Please check them.</div>
+            )}
+            {sec.key === "important_dates" && datesMismatch && (
+              <div className="alert alert--warning"><AlertTriangle size={16} /> Upload dates differ from the Registration window ({fmtDateTime(reg.opens_at)} → {fmtDateTime(reg.closes_at)}). Participants can only submit within the Registration window.</div>
+            )}
             <div className="form-grid">
               {sec.fields.map(([key, label, type = "text", hint]) => {
                 const v = values[sec.key]?.[key];
@@ -101,13 +123,15 @@ export default function Settings() {
                   );
                 }
                 return (
-                  <div key={key} className={type === "ist" ? "form-grid__half" : "form-grid__full"}>
+                  <div key={key} className={type === "ist" || type === "date" ? "form-grid__half" : "form-grid__full"}>
                     <Field label={label} error={err} hint={hint}>
                       {(p) => type === "textarea"
                         ? <textarea {...p} className="input mr" rows={3} value={v ?? ""} onChange={(e) => set(sec.key, key, e.target.value)} />
                         : type === "ist"
                           ? <input {...p} type="datetime-local" className="input" value={toIstInput(v)} onChange={(e) => set(sec.key, key, fromIstInput(e.target.value))} />
-                          : <input {...p} className="input mr" value={v ?? ""} onChange={(e) => set(sec.key, key, e.target.value)} />}
+                          : type === "date"
+                            ? <input {...p} type="date" className="input" value={v ?? ""} onChange={(e) => set(sec.key, key, e.target.value)} />
+                            : <input {...p} className="input mr" value={v ?? ""} onChange={(e) => set(sec.key, key, e.target.value)} />}
                     </Field>
                   </div>
                 );

@@ -2,6 +2,7 @@ import { AlertCircle, LogIn } from "lucide-react";
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Field, Spinner } from "../components/ui.jsx";
+import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { apiError } from "../lib/api.js";
 
@@ -38,7 +39,7 @@ export default function Login() {
       </div>
       <form className="login__card" onSubmit={submit}>
         <h1>Sign in</h1>
-        <p className="muted">Amrut Durgotsav 2026 · Admin console</p>
+        <p className="muted">Amrut Durgotsav {EDITION_YEAR} · Admin console</p>
         {error && <div className="alert alert--error" role="alert"><AlertCircle size={16} /> {error}</div>}
         <Field label="Email" required>
           {(p) => <input {...p} className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />}
