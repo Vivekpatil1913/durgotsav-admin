@@ -77,7 +77,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
     setBusy(true);
     try {
       const payload = { ...edit };
-      ["district_id", "fort_id"].forEach((k) => k in payload && (payload[k] = payload[k] ? Number(payload[k]) : null));
+      ["district_id", "fort_id", "members_count"].forEach((k) => k in payload && (payload[k] = payload[k] ? Number(payload[k]) : null));
       const { data: res } = await api.put(`/admin/registrations/${id}`, payload);
       setData(res.data);
       setMode(null);
@@ -187,7 +187,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
             <div className="stack">
               {mode === "edit" ? (
                 <div className="stack">
-                  {[["name", "Name (printed on certificate)"], ["organization_name", "Organisation"], ["phone", "Mobile"], ["email", "Email"], ["city", "City"]].map(([k, label]) => (
+                  {[["name", "Name (printed on certificate)"], ["organization_name", "Organisation"], ["members_count", "Members"], ["phone", "Mobile"], ["email", "Email"], ["city", "City"]].map(([k, label]) => (
                     <Field key={k} label={label}>{(p) => <input {...p} className="input" defaultValue={r[k] ?? ""} onChange={(e) => setEdit((s) => ({ ...s, [k]: e.target.value }))} />}</Field>
                   ))}
                   <Field label="District">{(p) => (
@@ -208,6 +208,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
                   <dl className="kv">
                     <div><dt>Name</dt><dd className="mr">{r.name}</dd></div>
                     <div><dt>Type</dt><dd>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}</dd></div>
+                    {r.members_count && <div><dt>Members</dt><dd>{r.members_count}</dd></div>}
                     <div><dt>Mobile</dt><dd><a href={`tel:${r.phone}`}>{r.phone}</a></dd></div>
                     <div><dt>Email</dt><dd>{r.email ? <a href={`mailto:${r.email}`}>{r.email}</a> : "—"}</dd></div>
                     <div><dt>Location</dt><dd className="mr">{[r.city, r.district, r.country !== "India" ? r.country : null].filter(Boolean).join(", ") || "—"}</dd></div>

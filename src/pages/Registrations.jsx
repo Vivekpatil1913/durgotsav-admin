@@ -39,7 +39,7 @@ export default function Registrations() {
     { key: "name", label: "Participant", render: (r) => (
       <div className="cell-stack">
         <strong className="mr">{r.name}</strong>
-        <small>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}</small>
+        <small>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}{r.members_count ? ` · ${r.members_count} members` : ""}</small>
       </div>
     ) },
     { key: "phone", label: "Mobile", render: (r) => <span className="mono">{r.phone}</span> },
