@@ -9,8 +9,9 @@ const DISTRICT_LIMIT = 10;
 export default function Districts() {
   const navigate   = useNavigate();
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ sort: "total", dir: "desc" });
 
-  const { data, loading, error } = useFetch("/admin/stats/districts", { page, limit: DISTRICT_LIMIT });
+  const { data, loading, error } = useFetch("/admin/stats/districts", { page, limit: DISTRICT_LIMIT, ...sort });
   const raw        = data?.data;
   const rows       = raw?.items ?? [];
   const meta       = raw?.meta  ?? null;
@@ -29,6 +30,7 @@ export default function Districts() {
     },
     {
       key: "district",
+      sortKey: "district",
       label: "District",
       render: (r) => (
         <div className="cell-stack">
@@ -49,10 +51,10 @@ export default function Districts() {
         </div>
       ),
     },
-    { key: "total",    label: "Registrations", render: (r) => <strong>{fmtNumber(r.total)}</strong> },
-    { key: "verified", label: "Verified",      render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span> },
-    { key: "pending",  label: "Pending",       render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span> },
-    { key: "rejected", label: "Rejected",      render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span> },
+    { key: "total",    sortKey: "total",    sortFirst: "desc", label: "Registrations", render: (r) => <strong>{fmtNumber(r.total)}</strong> },
+    { key: "verified", sortKey: "verified", sortFirst: "desc", label: "Verified",      render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span> },
+    { key: "pending",  sortKey: "pending",  sortFirst: "desc", label: "Pending",       render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span> },
+    { key: "rejected", sortKey: "rejected", sortFirst: "desc", label: "Rejected",      render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span> },
   ];
 
   return (
@@ -76,6 +78,7 @@ export default function Districts() {
           onRowClick={(r) => navigate(`/registrations?district_id=${r.id}`)}
           rowKey={(r) => r.id ?? r.district}
           startIndex={(page - 1) * DISTRICT_LIMIT}
+          sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
         />
         {(totalRows > 0 || page > 1) && (
           <Pagination

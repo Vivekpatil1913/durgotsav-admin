@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Copy, Expand, RotateCcw, XCircle } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { BulkBar } from "../components/BulkBar.jsx";
 import { RegistrationDrawer } from "../components/RegistrationDrawer.jsx";
 import { EmptyState, PageHeader, Pagination, Spinner, useSelection } from "../components/ui.jsx";
@@ -26,11 +26,47 @@ export default function Moderation() {
   const lookups = useFetch("/admin/lookups").data?.data ?? { divisions: [], districts: [], talukas: [], forts: [] };
   const { data, loading, error, reload } = useFetch("/admin/registrations", clean({ ...f, sort: "oldest" }));
   const rows = data?.data ?? [];
+
+  // The drawer walks the whole queue, not just the cards on this page: Previous / Next and "3 of 25" come from the
+  // server (GET …/:id/neighbors) with the queue's filters and order, so they stay right while other admins review.
+  const queueParams = clean({
+    status: f.status, division_id: f.division_id, district_id: f.district_id, taluka_id: f.taluka_id, fort_id: f.fort_id, sort: "oldest",
+  });
+  const around = useFetch(openId ? `/admin/registrations/${openId}/neighbors` : null, queueParams);
+  const openRef = useRef(null);
+  const open = useCallback((id) => {
+    openRef.current = id;
+    setOpenId(id);
+  }, []);
+  const closeDrawer = useCallback(() => open(null), [open]);
+
+  // After verify / reject / duplicate / request info the record leaves the queue: the server says which one followed it
+  async function reviewed(registration) {
+    reload();
+    try {
+      const { data: res } = await api.get(`/admin/registrations/${registration.id}/neighbors`, { params: queueParams });
+      if (openRef.current !== registration.id) return; // the admin closed the drawer or moved on meanwhile
+      const next = res.data;
+      if (next.next_id) return open(next.next_id);
+      open(null);
+      toast(next.total ? `Reached the end of this queue — ${fmtNumber(next.total)} still waiting` : "Queue is clear — nothing left to review", "info");
+    } catch (err) {
+      toast(apiError(err).message, "error");
+    }
+  }
+
+  // Only neighbours fetched for the record on screen count; while the new ones load, the buttons wait
+  const here = around.data?.data?.id === openId ? around.data.data : null;
+  const nav = openId && {
+    position: !here ? "…" : here.position ? `${fmtNumber(here.position)} of ${fmtNumber(here.total)}` : `– of ${fmtNumber(here.total)}`,
+    prev: here?.prev_id ? () => open(here.prev_id) : null,
+    next: here?.next_id ? () => open(here.next_id) : null,
+  };
   const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : [];
   const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
 
   async function quick(id, action) {
-    if (action === "reject") return setOpenId(id); // rejection needs a reason — use the drawer
+    if (action === "reject") return open(id); // rejection needs a reason — use the drawer
     if (action === "mark_duplicate" && !(await confirm({ title: "Mark as duplicate?", message: "The participant will see that this photo was already used in another registration. Any certificate is revoked.", confirmLabel: "Mark duplicate", tone: "danger" }))) return;
     setBusyId(id);
     try {
@@ -91,7 +127,7 @@ export default function Moderation() {
                 </label>
               )}
               {(r.duplicate_of_photo_id || r.status === "duplicate") && <span className="photo-card__dup" title={r.status === "duplicate" ? "Marked as duplicate by an admin" : "Matches an earlier photo"}><AlertTriangle size={13} /> Duplicate</span>}
-              <button type="button" className="photo-card__img" onClick={() => setOpenId(r.id)} aria-label={`Open ${r.registration_no}`}>
+              <button type="button" className="photo-card__img" onClick={() => open(r.id)} aria-label={`Open ${r.registration_no}`}>
                 {r.thumb_path ? <img src={assetUrl(r.thumb_path)} alt={`Submission by ${r.name}`} loading="lazy" /> : <span>No photo</span>}
                 <Expand size={16} className="photo-card__zoom" aria-hidden="true" />
               </button>
@@ -123,7 +159,7 @@ export default function Moderation() {
       <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} jump={false} />
 
       {canBulk && <BulkBar selection={selection} photoIds={(sel) => rows.filter((r) => sel.includes(r.id) && r.photo_id).map((r) => r.photo_id)} onDone={reload} />}
-      <RegistrationDrawer id={openId} lookups={lookups} onClose={() => setOpenId(null)} onChanged={reload} />
+      <RegistrationDrawer id={openId} lookups={lookups} onClose={closeDrawer} onChanged={reload} onReviewed={reviewed} nav={nav} />
     </>
   );
 }

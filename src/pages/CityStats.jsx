@@ -1,4 +1,3 @@
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
 import { DataTable, PageHeader, Pagination } from "../components/ui.jsx";
 import { useFetch } from "../hooks/useFetch.js";
@@ -6,19 +5,15 @@ import { fmtNumber } from "../lib/format.js";
 
 const CITY_LIMIT = 10;
 
-const SORT_COLS = ["city", "registrations", "uploaded", "verified", "pending", "rejected", "certificates"];
-
 export default function CityStats() {
   const [page,     setPage]     = useState(1);
   const [district, setDistrict] = useState("");
-  const [sortKey,  setSortKey]  = useState("registrations");
-  const [sortDir,  setSortDir]  = useState("desc");
+  const [sort,     setSort]     = useState({ sort: "registrations", dir: "desc" });
 
   const params = {
     page,
     limit: CITY_LIMIT,
-    sort: sortKey,
-    dir: sortDir,
+    ...sort,
     ...(district ? { district } : {}),
   };
 
@@ -33,71 +28,59 @@ export default function CityStats() {
 
   const districtList = distData?.data?.items ?? [];
 
-  function toggleSort(key) {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("desc"); setPage(1); }
-  }
-
-  function ThSort({ col, label }) {
-    const active = sortKey === col;
-    const Icon   = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
-    return (
-      <button
-        type="button"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 3,
-          background: "none", border: "none", padding: 0,
-          font: "inherit", fontWeight: 600, fontSize: "inherit",
-          cursor: "pointer", color: active ? "var(--brand)" : "inherit",
-          letterSpacing: "0.04em", textTransform: "uppercase",
-        }}
-        onClick={() => toggleSort(col)}
-        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      >
-        {label} <Icon size={11} />
-      </button>
-    );
-  }
-
   const columns = [
     {
       key: "city",
-      label: SORT_COLS.includes("city") ? <ThSort col="city" label="City / Taluka" /> : "City / Taluka",
+      sortKey: "city",
+      label: "City / Taluka",
       render: (r) => <div className="cell-stack"><strong>{r.city || "—"}</strong></div>,
     },
     {
       key: "district",
+      sortKey: "district",
       label: "District",
       render: (r) => <div className="cell-stack"><strong className="mr">{r.district || "—"}</strong><small>{r.district_en || ""}</small></div>,
     },
     {
       key: "registrations",
-      label: <ThSort col="registrations" label="Registrations" />,
+      sortKey: "registrations",
+      sortFirst: "desc",
+      label: "Registrations",
       render: (r) => <strong>{fmtNumber(r.registrations)}</strong>,
     },
     {
       key: "uploaded",
-      label: <ThSort col="uploaded" label="Uploaded" />,
+      sortKey: "uploaded",
+      sortFirst: "desc",
+      label: "Uploaded",
       render: (r) => fmtNumber(r.uploaded),
     },
     {
       key: "verified",
-      label: <ThSort col="verified" label="Verified" />,
+      sortKey: "verified",
+      sortFirst: "desc",
+      label: "Verified",
       render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span>,
     },
     {
       key: "pending",
+      sortKey: "pending",
+      sortFirst: "desc",
       label: "Pending",
       render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span>,
     },
     {
       key: "rejected",
+      sortKey: "rejected",
+      sortFirst: "desc",
       label: "Rejected",
       render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span>,
     },
     {
       key: "certificates",
-      label: <ThSort col="certificates" label="Certificates" />,
+      sortKey: "certificates",
+      sortFirst: "desc",
+      label: "Certificates",
       render: (r) => fmtNumber(r.certificates),
     },
   ];
@@ -138,6 +121,7 @@ export default function CityStats() {
           empty="No city data available"
           rowKey={(r) => `${r.district_id ?? ""}__${r.city ?? ""}`}
           startIndex={(page - 1) * CITY_LIMIT}
+          sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
         />
         {(total > 0 || page > 1) && (
           <Pagination

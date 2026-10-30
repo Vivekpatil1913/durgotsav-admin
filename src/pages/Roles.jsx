@@ -19,13 +19,14 @@ export default function Roles() {
   const [saving, setSaving]       = useState(false);
   const [saveErr, setSaveErr]     = useState(null);
   const [form, setForm]           = useState(EMPTY_ROLE);
+  const [sort, setSort]           = useState({ sort: "", dir: "" });
   const nameRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [r, c] = await Promise.all([
-        api.get("/admin/rbac"),
+        api.get("/admin/rbac", { params: sort.sort ? sort : {} }),
         api.get("/admin/rbac/catalogue"),
       ]);
       setRoles(r.data.data);
@@ -36,7 +37,7 @@ export default function Roles() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sort]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -118,6 +119,7 @@ export default function Roles() {
   const cols = [
     {
       key: "name",
+      sortKey: "name",
       label: "Role",
       render: (r) => (
         <span>
@@ -128,8 +130,8 @@ export default function Roles() {
         </span>
       ),
     },
-    { key: "slug",       label: "Slug",   render: (r) => <code>{r.slug}</code> },
-    { key: "user_count", label: "Users",  render: (r) => r.user_count },
+    { key: "slug",       sortKey: "slug",                          label: "Slug",   render: (r) => <code>{r.slug}</code> },
+    { key: "user_count", sortKey: "user_count", sortFirst: "desc", label: "Users",  render: (r) => r.user_count },
     {
       key: "actions",
       label: "",
@@ -169,7 +171,8 @@ export default function Roles() {
         <div className="alert alert--error">{error}</div>
       ) : (
         <section className="panel panel--flush">
-          <DataTable columns={cols} rows={roles} loading={loading} empty="No roles yet" startIndex={0} total={roles.length} />
+          <DataTable columns={cols} rows={roles} loading={loading} empty="No roles yet" startIndex={0} total={roles.length}
+            sort={{ key: sort.sort, dir: sort.dir, onSort: setSort, clearable: true }} />
         </section>
       )}
 

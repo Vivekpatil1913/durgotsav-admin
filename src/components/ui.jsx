@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, ChevronsUpDown, ImagePlus, Inbox, Loader2, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, ChevronUp, ImagePlus, Inbox, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtNumber } from "../lib/format.js";
@@ -38,7 +38,8 @@ export function PageHeader({ title, subtitle, crumbs = [], actions }) {
 }
 
 // Side drawer used for create/edit/detail. Esc and backdrop click close it; focus moves inside on open.
-export function Drawer({ open, onClose, title, children, footer, wide }) {
+// actions: optional controls shown in the header before the close button.
+export function Drawer({ open, onClose, title, children, footer, wide, actions }) {
   const panel = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -70,7 +71,10 @@ export function Drawer({ open, onClose, title, children, footer, wide }) {
           >
             <header className="drawer__head">
               <h2>{title}</h2>
-              <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+              <div className="drawer__head-actions">
+                {actions}
+                <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+              </div>
             </header>
             <div className="drawer__body">{children}</div>
             {footer && <footer className="drawer__foot">{footer}</footer>}
@@ -125,11 +129,34 @@ export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100]
   );
 }
 
+// The order after clicking column `c`: a new column starts in its first direction, the active one flips; with
+// `clearable`, the click after both directions returns to the list's default order ({ sort: "", dir: "" }).
+function nextSort(sort, c) {
+  const first = c.sortFirst ?? "asc";
+  if (sort.key !== c.sortKey) return { sort: c.sortKey, dir: first };
+  if (sort.clearable && sort.dir !== first) return { sort: "", dir: "" };
+  return { sort: c.sortKey, dir: sort.dir === "asc" ? "desc" : "asc" };
+}
+
+// Only columns that name a `sortKey` get a header button
+function headerContent(c, sort) {
+  if (!sort || !c.sortKey) return c.label;
+  const active = sort.key === c.sortKey;
+  const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button type="button" className={`th-inner th-button${active ? " is-active" : ""}`} onClick={() => sort.onSort(nextSort(sort, c))}>
+      {c.label}<Icon size={12} className="th-sort" aria-hidden="true" />
+    </button>
+  );
+}
+
 /**
- * columns: [{ key, label, render?(row), width?, className? }]
+ * columns: [{ key, label, render?(row), width?, className?, sortKey?, sortFirst?: "asc"|"desc" }]
  * selection: { selected:Set, onToggle(id), onToggleAll(ids) } (optional)
+ * sort: { key, dir: "asc"|"desc", onSort({ sort, dir }), clearable? } (optional) — the caller re-fetches sorted rows
+ * from the server; sortFirst is a column's first direction (counts and dates read best "desc")
  */
-export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id, startIndex = 0, total }) {
+export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id, startIndex = 0, total, sort }) {
   const ids = (rows ?? []).map(rowKey);
   const allSelected = selection && ids.length > 0 && ids.every((id) => selection.selected.has(id));
   const colSpan = columns.length + 2 + (selection ? 1 : 0);
@@ -145,10 +172,12 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
             )}
             <th className="table__sno">S.NO.</th>
             {columns.map((c) => (
-              <th key={c.key} style={{ width: c.width }}>
-                {c.label && c.key !== "_actions"
-                  ? <span className="th-inner">{c.label}<ChevronsUpDown size={12} className="th-sort" aria-hidden="true" /></span>
-                  : c.label}
+              <th
+                key={c.key}
+                style={{ width: c.width }}
+                aria-sort={sort && c.sortKey ? (sort.key !== c.sortKey ? "none" : sort.dir === "asc" ? "ascending" : "descending") : undefined}
+              >
+                {headerContent(c, sort)}
               </th>
             ))}
           </tr>

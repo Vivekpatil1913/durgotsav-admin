@@ -1120,6 +1120,23 @@ select.input {
   color: var(--text-3);
   flex-shrink: 0;
 }
+.th-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.th-button:hover,
+.th-button.is-active {
+  color: var(--text);
+}
+.th-button.is-active .th-sort {
+  color: var(--brand);
+}
 /* "X total" badge above table */
 .table-total {
   padding: 10px 16px 0;
@@ -1760,6 +1777,29 @@ button.stat-card:hover {
   gap: 10px;
   font-size: 17px;
 }
+.drawer__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+/* Previous / next record in a review queue */
+.drawer-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+.drawer-nav__pos {
+  min-width: 64px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .drawer__body {
   flex: 1;
   overflow-y: auto;
@@ -1974,7 +2014,13 @@ button.stat-card:hover {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
+}
+.review-bar__hint {
+  margin-right: auto;
+  font-size: 12.5px;
+  color: var(--text-2);
 }
 
 /* ---------------------------------------------------------------- images / gallery */

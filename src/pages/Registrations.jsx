@@ -11,7 +11,19 @@ import { clean, useQueryState } from "../hooks/useQueryState.js";
 import { apiError, assetUrl, downloadFile } from "../lib/api.js";
 import { fmtDateTime, PARTICIPANT_TYPES, STATUS } from "../lib/format.js";
 
-const DEFAULTS = { q: "", status: "", division_id: "", district_id: "", taluka_id: "", fort_id: "", from: "", to: "", duplicates: "", featured: "", trashed: "", sort: "newest", limit: "10", page: "1" };
+const DEFAULTS = { q: "", status: "", division_id: "", district_id: "", taluka_id: "", fort_id: "", from: "", to: "", duplicates: "", featured: "", trashed: "", sort: "created_at", dir: "desc", limit: "10", page: "1" };
+const SORTS = [
+  ["created_at:desc", "Newest first"],
+  ["created_at:asc", "Oldest first"],
+  ["name:asc", "Name A–Z"],
+  ["name:desc", "Name Z–A"],
+  ["registration_no:asc", "Reg. no ↑"],
+  ["registration_no:desc", "Reg. no ↓"],
+  ["phone:asc", "Mobile ↑"],
+  ["phone:desc", "Mobile ↓"],
+  ["status:asc", "Status A–Z"],
+  ["status:desc", "Status Z–A"],
+];
 
 export default function Registrations() {
   const { toast } = useUi();
@@ -35,23 +47,23 @@ export default function Registrations() {
 
   const columns = [
     { key: "photo", label: "", width: 64, render: (r) => r.thumb_path ? <img className="thumb" src={assetUrl(r.thumb_path)} alt="" loading="lazy" /> : <span className="thumb thumb--empty" /> },
-    { key: "registration_no", label: "Reg. no", render: (r) => <span className="mono">{r.registration_no}</span> },
-    { key: "name", label: "Participant", render: (r) => (
+    { key: "registration_no", sortKey: "registration_no", label: "Reg. no", render: (r) => <span className="mono">{r.registration_no}</span> },
+    { key: "name", sortKey: "name", label: "Participant", render: (r) => (
       <div className="cell-stack">
         <strong className="mr">{r.name}</strong>
         <small>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}{r.members_count ? ` · ${r.members_count} members` : ""}</small>
       </div>
     ) },
-    { key: "phone", label: "Mobile", render: (r) => <span className="mono">{r.phone}</span> },
+    { key: "phone", sortKey: "phone", label: "Mobile", render: (r) => <span className="mono">{r.phone}</span> },
     { key: "district", label: "District / fort", render: (r) => <div className="cell-stack mr"><span>{r.district ?? r.country}</span><small>{r.fort ?? "Other fort"}</small></div> },
-    { key: "status", label: "Status", render: (r) => (
+    { key: "status", sortKey: "status", label: "Status", render: (r) => (
       <div className="cluster cluster--tight">
         <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
         {r.duplicate_of_photo_id && <span title="Photo matches an earlier submission"><AlertTriangle size={15} className="text-warning" aria-label="Duplicate photo" /></span>}
         {r.is_featured && <span title="Featured in gallery"><Star size={15} className="text-gold" aria-label="Featured" /></span>}
       </div>
     ) },
-    { key: "created_at", label: "Submitted", render: (r) => <small>{fmtDateTime(r.created_at)}</small> },
+    { key: "created_at", sortKey: "created_at", sortFirst: "desc", label: "Submitted", render: (r) => <small>{fmtDateTime(r.created_at)}</small> },
   ];
 
   async function exportCsv() {
@@ -111,15 +123,14 @@ export default function Registrations() {
         </select>
         <input className="input" type="date" aria-label="From date" value={f.from} onChange={(e) => setF({ from: e.target.value })} />
         <input className="input" type="date" aria-label="To date" value={f.to} onChange={(e) => setF({ to: e.target.value })} />
-        <select className="input" aria-label="Sort" value={f.sort} onChange={(e) => setF({ sort: e.target.value })}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="name">Name A–Z</option>
+        <select className="input" aria-label="Sort" value={`${f.sort}:${f.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(":"); setF({ sort, dir }); }}>
+          {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
 
       <section className="panel panel--flush">
-        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={(r) => setOpenId(r.id)} selection={f.trashed || !canBulk ? undefined : selection} empty="No registrations match these filters" />
+        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={(r) => setOpenId(r.id)} selection={f.trashed || !canBulk ? undefined : selection} empty="No registrations match these filters"
+          sort={{ key: f.sort, dir: f.dir, onSort: setF }} />
         <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} jump={false} />
       </section>
 

@@ -1,7 +1,8 @@
 import { AlertTriangle, Save } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Field, ImageUpload, PageHeader, Spinner } from "../components/ui.jsx";
+import { Badge, Field, ImageUpload, PageHeader, Spinner } from "../components/ui.jsx";
 import { EDITION_YEAR } from "../config/edition.js";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { api, apiError } from "../lib/api.js";
 import { fmtDateTime } from "../lib/format.js";
@@ -18,6 +19,7 @@ const istDay = (iso) => toIstInput(iso).slice(0, 10);
 const offEdition = (...values) => values.some((v) => v && Number(istDay(v).slice(0, 4)) !== EDITION_YEAR);
 // The public site shows {year} as the edition year, so such text needs no yearly edits
 const YEAR_HINT = `Write {year} for the edition year (${EDITION_YEAR}) — it updates by itself next year`;
+const WINDOW = { open: ["Open now", "success"], not_started: ["Not started", "info"], closed: ["Closed", "danger"], disabled: ["Disabled", "danger"] };
 
 const SECTIONS = [
   {
@@ -46,16 +48,37 @@ const SECTIONS = [
 ];
 
 export default function Settings() {
-  const { toast } = useUi();
+  const { toast, confirm } = useUi();
+  const canEdit = useAuth().hasPermission("settings", "write");
   const [values, setValues] = useState(null);
+  const [meta, setMeta] = useState({});
   const [saving, setSaving] = useState(null);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    api.get("/admin/settings").then((r) => setValues(r.data.data)).catch((e) => toast(apiError(e).message, "error"));
+    api.get("/admin/settings").then((r) => { setValues(r.data.data); setMeta(r.data.meta ?? {}); }).catch((e) => toast(apiError(e).message, "error"));
   }, [toast]);
 
   const set = (section, key, v) => setValues((s) => ({ ...s, [section]: { ...s[section], [key]: v } }));
+
+  // Saves on its own as soon as it is confirmed, so unsaved edits in the sections below are kept
+  async function toggleForceOpen(next) {
+    const ok = await confirm(next
+      ? { title: "Force open registration?", message: "The registration form opens on the website for everyone right away, ignoring the registration window and master switch below. Turn it off again when you are done.", confirmLabel: "Force open", tone: "danger" }
+      : { title: "Stop forcing registration open?", message: "Registration follows the registration window and master switch again. Outside the window the website shows the closed notice instead of the form.", confirmLabel: "Turn off", tone: "primary" });
+    if (!ok) return;
+    setSaving("registration_force_open");
+    try {
+      const { data } = await api.put("/admin/settings", { registration_force_open: next });
+      setValues((s) => ({ ...s, registration_force_open: data.data.registration_force_open }));
+      setMeta(data.meta ?? {});
+      toast(next ? "Registration forced open — the website updates within a minute" : "Force open turned off — the website updates within a minute");
+    } catch (err) {
+      toast(apiError(err).message, "error");
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function save(section) {
     setSaving(section);
@@ -63,6 +86,7 @@ export default function Settings() {
     try {
       const { data } = await api.put("/admin/settings", { [section]: values[section] });
       setValues(data.data);
+      setMeta(data.meta ?? {});
       toast("Settings saved — the website updates within a minute");
     } catch (err) {
       const e = apiError(err);
@@ -78,11 +102,30 @@ export default function Settings() {
   const dates = values.important_dates ?? {};
   const datesMismatch = Boolean(reg.opens_at && reg.closes_at && dates.upload_opens && dates.upload_closes)
     && (istDay(reg.opens_at) !== dates.upload_opens || istDay(reg.closes_at) !== dates.upload_closes);
+  const forceOpen = values.registration_force_open === true;
+  const [statusLabel, statusTone] = WINDOW[meta.registration_status?.reason] ?? ["—", "neutral"];
 
   return (
     <>
       <PageHeader title="Settings" crumbs={["System"]} subtitle="Site-wide content and behaviour. Each section saves separately." />
       <div className="settings">
+        <section className="panel settings__section" aria-labelledby="set-force-open">
+          <header className="panel__head">
+            <div>
+              <h2 id="set-force-open">Force open registration</h2>
+              <p className="muted">Opens the registration form now, whatever the Registration window below says. Saves as soon as you confirm.</p>
+            </div>
+            <Badge tone={statusTone}>Registration: {statusLabel}</Badge>
+          </header>
+          {meta.registration_force_open_env && (
+            <div className="alert alert--warning"><AlertTriangle size={16} /> REGISTRATION_FORCE_OPEN=true is set in the server .env, so registration stays open whatever this switch says. Set it to false and restart the API to control it from here.</div>
+          )}
+          <label className="switch">
+            <input type="checkbox" checked={forceOpen} disabled={!canEdit || saving === "registration_force_open"} onChange={(e) => toggleForceOpen(e.target.checked)} />
+            <span className="switch__track" aria-hidden="true" /> {forceOpen ? "On — the form is open for everyone" : "Off — registration follows the window below"}
+            {saving === "registration_force_open" && <Spinner />}
+          </label>
+        </section>
         {SECTIONS.map((sec) => (
           <section key={sec.key} className="panel settings__section" aria-labelledby={`set-${sec.key}`}>
             <header className="panel__head">

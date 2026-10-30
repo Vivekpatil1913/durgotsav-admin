@@ -56,7 +56,7 @@ export function BulkBar({ selection, photoIds, onDone }) {
         <motion.div className="bulk-bar" role="region" aria-label="Bulk actions" initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}>
           {noteFor ? (
             <div className="bulk-bar__note">
-              <label htmlFor="bulk-note">{noteFor === "reject" ? "Rejection reason" : "What should participants send?"} (shown to {fmtNumber(ids.length)} participant(s))</label>
+              <label htmlFor="bulk-note">{noteFor === "reject" ? "Rejection reason" : "What should participants send?"} (shown to {fmtNumber(ids.length)} participant(s){noteFor === "reject" ? " and emailed with a link to register again" : ""})<span className="req">*</span></label>
               <input id="bulk-note" className="input" value={note} onChange={(e) => setNote(e.target.value)} autoFocus maxLength={500} onKeyDown={(e) => e.key === "Enter" && review(noteFor)} />
               <button type="button" className={`btn ${noteFor === "reject" ? "btn--danger" : "btn--primary"}`} disabled={busy || !note.trim()} onClick={() => review(noteFor)}>{busy && <Spinner />} Apply</button>
               <button type="button" className="btn btn--ghost" onClick={() => setNoteFor(null)}>Back</button>

@@ -3,11 +3,12 @@ import { Edit2, MapPin, Plus, Search, Trash2, RotateCcw } from "lucide-react";
 import { api, apiError } from "../lib/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
-import { Spinner, DataTable, Drawer, Field, PageHeader } from "../components/ui.jsx";
+import { Spinner, DataTable, Drawer, Field, PageHeader, Pagination } from "../components/ui.jsx";
 
 const EMPTY_FORM = {
   name: "", email: "", role_id: "", password: "", is_active: true, division_ids: [],
 };
+const PAGE_SIZE = 10;
 
 export default function Users() {
   const { admin: me } = useAuth();
@@ -15,23 +16,32 @@ export default function Users() {
   const [admins,    setAdmins]    = useState([]);
   const [roles,     setRoles]     = useState([]);
   const [divisions, setDivisions] = useState([]);
-  const [meta,      setMeta]      = useState({ total: 0, page: 1 });
+  const [meta,      setMeta]      = useState({ total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 });
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
   const [query,     setQuery]     = useState("");
   const [trashed,   setTrashed]   = useState(false);
+  const [sort,      setSort]      = useState({ sort: "", dir: "" });
+  const [page,      setPage]      = useState(1);
   const [drawer,    setDrawer]    = useState(null);
   const [form,      setForm]      = useState(EMPTY_FORM);
   const [saving,    setSaving]    = useState(false);
   const [saveErr,   setSaveErr]   = useState(null);
   const nameRef = useRef(null);
 
-  const load = useCallback(async (page = 1) => {
+  // Reloads the current page, so saving, deleting or restoring keeps the admin where they were
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: 25, trashed: trashed ? "true" : "false" };
+      const params = { page, limit: PAGE_SIZE, trashed: trashed ? "true" : "false" };
       if (query) params.q = query;
+      if (sort.sort) Object.assign(params, sort);
       const r = await api.get("/admin/admins", { params });
+      // Deleting the only user on the last page leaves it empty: step back to the new last page
+      if (page > r.data.meta.totalPages) {
+        setPage(r.data.meta.totalPages);
+        return;
+      }
       setAdmins(r.data.data);
       setMeta(r.data.meta);
       setError(null);
@@ -40,7 +50,7 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
-  }, [query, trashed]);
+  }, [query, trashed, sort, page]);
 
   // Load roles + divisions once
   useEffect(() => {
@@ -149,6 +159,7 @@ export default function Users() {
   const cols = [
     {
       key: "name",
+      sortKey: "name",
       label: "Name",
       render: (a) => (
         <span>
@@ -159,6 +170,7 @@ export default function Users() {
     },
     {
       key: "role",
+      sortKey: "role",
       label: "Role",
       render: (a) => (
         <span>
@@ -169,6 +181,8 @@ export default function Users() {
     },
     {
       key: "is_active",
+      sortKey: "is_active",
+      sortFirst: "desc",
       label: "Status",
       render: (a) => (
         <span className={`badge ${a.is_active ? "badge--success" : "badge--neutral"}`}>
@@ -178,6 +192,8 @@ export default function Users() {
     },
     {
       key: "created_at",
+      sortKey: "created_at",
+      sortFirst: "desc",
       label: "Created",
       render: (a) => new Date(a.created_at).toLocaleDateString("en-IN"),
     },
@@ -223,10 +239,10 @@ export default function Users() {
       />
 
       <div className="resource-tabs">
-        <button type="button" className={`resource-tab ${!trashed ? "is-active" : ""}`} onClick={() => setTrashed(false)}>
+        <button type="button" className={`resource-tab ${!trashed ? "is-active" : ""}`} onClick={() => { setTrashed(false); setPage(1); }}>
           Admin Users
         </button>
-        <button type="button" className={`resource-tab ${trashed ? "is-active" : ""}`} onClick={() => setTrashed(true)}>
+        <button type="button" className={`resource-tab ${trashed ? "is-active" : ""}`} onClick={() => { setTrashed(true); setPage(1); }}>
           <Trash2 size={13} /> Trash
         </button>
       </div>
@@ -239,7 +255,7 @@ export default function Users() {
             className="input"
             placeholder="Search name or email…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
           />
         </label>
       </div>
@@ -253,9 +269,11 @@ export default function Users() {
             rows={admins}
             loading={loading}
             empty={trashed ? "Trash is empty" : "No admin users yet"}
-            startIndex={((meta.page ?? 1) - 1) * (meta.limit ?? 25)}
+            startIndex={(meta.page - 1) * meta.limit}
             total={meta.total}
+            sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); }, clearable: true }}
           />
+          <Pagination meta={meta} onPage={setPage} />
         </section>
       )}
 

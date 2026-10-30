@@ -1,6 +1,5 @@
 import {
-  AlertTriangle, Award, CalendarDays, ChevronDown, ChevronUp,
-  ChevronsUpDown, Clock, Copy, Images, Inbox, ShieldCheck, Upload,
+  AlertTriangle, Award, CalendarDays, Clock, Copy, Images, Inbox, ShieldCheck, Upload,
   Users, Video, XCircle,
 } from "lucide-react";
 import { useState } from "react";
@@ -159,11 +158,15 @@ function RegionDonut() {
 // ---------------------------------------------------------------- DivisionStatsPanel
 const DIVISION_PAGE_SIZE = 10;
 
+// Count columns sort from the highest down first
+const countColumn = (key, label, render) => ({ key, sortKey: key, sortFirst: "desc", label, render });
+
 function DivisionStatsPanel() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ sort: "total", dir: "desc" });
 
-  const { data, loading, error } = useFetch("/admin/stats/divisions", { page, limit: DIVISION_PAGE_SIZE });
+  const { data, loading, error } = useFetch("/admin/stats/divisions", { page, limit: DIVISION_PAGE_SIZE, ...sort });
   const raw        = data?.data;
   const rows       = raw?.items ?? [];
   const meta       = raw?.meta ?? null;
@@ -174,6 +177,7 @@ function DivisionStatsPanel() {
   const columns = [
     {
       key: "division",
+      sortKey: "division",
       label: "Division",
       render: (r) => <div className="cell-stack"><strong className="mr">{r.division}</strong><small>{r.name_en}</small></div>,
     },
@@ -187,10 +191,10 @@ function DivisionStatsPanel() {
         </div>
       ),
     },
-    { key: "total",    label: "Registrations", render: (r) => <strong>{fmtNumber(r.total)}</strong> },
-    { key: "verified", label: "Verified",      render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span> },
-    { key: "pending",  label: "Pending",       render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span> },
-    { key: "rejected", label: "Rejected",      render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span> },
+    countColumn("total",    "Registrations", (r) => <strong>{fmtNumber(r.total)}</strong>),
+    countColumn("verified", "Verified",      (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span>),
+    countColumn("pending",  "Pending",       (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span>),
+    countColumn("rejected", "Rejected",      (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span>),
   ];
 
   return (
@@ -214,6 +218,7 @@ function DivisionStatsPanel() {
         empty="No division data available yet"
         rowKey={(r) => r.id ?? r.division}
         startIndex={(page - 1) * DIVISION_PAGE_SIZE}
+        sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
       {(total > 0 || page > 1) && (
         <Pagination
@@ -226,15 +231,16 @@ function DivisionStatsPanel() {
 }
 
 // ---------------------------------------------------------------- DistrictStatsPanel
-// Fetches all districts once (max 36 rows) then paginates client-side, 10 per page.
+// Fetches all districts once (max 36 rows), sorted by the server, then paginates client-side, 10 per page.
 const DISTRICT_PAGE_SIZE = 10;
 
 function DistrictStatsPanel() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ sort: "total", dir: "desc" });
 
   // Fetch all districts (≤36 in India) in one shot — paginated endpoint, request limit=50
-  const { data, loading, error } = useFetch("/admin/stats/districts", { limit: 50 });
+  const { data, loading, error } = useFetch("/admin/stats/districts", { limit: 50, ...sort });
   const allRows = data?.data?.items ?? [];
   const grand   = allRows.reduce((s, r) => s + (Number(r.total) || 0), 0);
 
@@ -246,6 +252,7 @@ function DistrictStatsPanel() {
   const columns = [
     {
       key: "district",
+      sortKey: "district",
       label: "District",
       render: (r) => <div className="cell-stack"><strong className="mr">{r.district}</strong><small>{r.name_en}</small></div>,
     },
@@ -259,10 +266,10 @@ function DistrictStatsPanel() {
         </div>
       ),
     },
-    { key: "total",    label: "Registrations", render: (r) => <strong>{fmtNumber(r.total)}</strong> },
-    { key: "verified", label: "Verified",      render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span> },
-    { key: "pending",  label: "Pending",       render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span> },
-    { key: "rejected", label: "Rejected",      render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span> },
+    countColumn("total",    "Registrations", (r) => <strong>{fmtNumber(r.total)}</strong>),
+    countColumn("verified", "Verified",      (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span>),
+    countColumn("pending",  "Pending",       (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span>),
+    countColumn("rejected", "Rejected",      (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span>),
   ];
 
   return (
@@ -287,6 +294,7 @@ function DistrictStatsPanel() {
         empty="No district data available yet"
         rowKey={(r) => r.id ?? r.district}
         startIndex={(page - 1) * DISTRICT_PAGE_SIZE}
+        sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
       {totalPages > 1 && (
         <Pagination
@@ -305,14 +313,12 @@ const CITY_LIMIT = 10;
 function CityStatsPanel({ districtList }) {
   const [page,     setPage]     = useState(1);
   const [district, setDistrict] = useState("");
-  const [sortKey,  setSortKey]  = useState("registrations");
-  const [sortDir,  setSortDir]  = useState("desc");
+  const [sort,     setSort]     = useState({ sort: "registrations", dir: "desc" });
 
   const params = {
     page,
     limit: CITY_LIMIT,
-    sort: sortKey,
-    dir: sortDir,
+    ...sort,
     ...(district ? { district } : {}),
   };
   const { data, loading, error } = useFetch("/admin/stats/cities", params);
@@ -323,42 +329,15 @@ function CityStatsPanel({ districtList }) {
   const total      = meta?.total      ?? rows.length;
   const totalPages = meta?.totalPages ?? 1;
 
-  function toggleSort(key) {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("desc"); setPage(1); }
-  }
-
-  // Inline sortable column header button
-  function ThSort({ col, children }) {
-    const active = sortKey === col;
-    const Icon   = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
-    return (
-      <button
-        type="button"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 3,
-          background: "none", border: "none", padding: 0,
-          font: "inherit", fontWeight: 600, fontSize: "inherit",
-          cursor: "pointer", color: active ? "var(--brand)" : "inherit",
-          letterSpacing: "0.04em", textTransform: "uppercase",
-        }}
-        onClick={() => toggleSort(col)}
-        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-      >
-        {children} <Icon size={11} />
-      </button>
-    );
-  }
-
   const columns = [
-    { key: "city",          label: <ThSort col="city">City / Taluka</ThSort>,          render: (r) => <strong>{r.city || "—"}</strong> },
-    { key: "district",      label: "District",                                          render: (r) => <span className="mr">{r.district || "—"}</span> },
-    { key: "registrations", label: <ThSort col="registrations">Registrations</ThSort>,  render: (r) => fmtNumber(r.registrations) },
-    { key: "uploaded",      label: <ThSort col="uploaded">Uploaded</ThSort>,            render: (r) => fmtNumber(r.uploaded) },
-    { key: "verified",      label: <ThSort col="verified">Verified</ThSort>,            render: (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span> },
-    { key: "pending",       label: "Pending",                                           render: (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span> },
-    { key: "rejected",      label: "Rejected",                                          render: (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span> },
-    { key: "certificates",  label: <ThSort col="certificates">Certificates</ThSort>,    render: (r) => fmtNumber(r.certificates) },
+    { key: "city",     sortKey: "city",     label: "City / Taluka", render: (r) => <strong>{r.city || "—"}</strong> },
+    { key: "district", sortKey: "district", label: "District",      render: (r) => <span className="mr">{r.district || "—"}</span> },
+    countColumn("registrations", "Registrations", (r) => fmtNumber(r.registrations)),
+    countColumn("uploaded",      "Uploaded",      (r) => fmtNumber(r.uploaded)),
+    countColumn("verified",      "Verified",      (r) => <span style={{ color: "var(--success)" }}>{fmtNumber(r.verified)}</span>),
+    countColumn("pending",       "Pending",       (r) => <span style={{ color: "var(--warning)" }}>{fmtNumber(r.pending)}</span>),
+    countColumn("rejected",      "Rejected",      (r) => <span style={{ color: "var(--danger)" }}>{fmtNumber(r.rejected)}</span>),
+    countColumn("certificates",  "Certificates",  (r) => fmtNumber(r.certificates)),
   ];
 
   return (
@@ -398,6 +377,7 @@ function CityStatsPanel({ districtList }) {
         empty="No city data available"
         rowKey={(r) => `${r.district ?? ""}__${r.city ?? ""}`}
         startIndex={(page - 1) * CITY_LIMIT}
+        sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
       {(total > 0 || page > 1) && (
         <Pagination

@@ -34,7 +34,7 @@ export default function ResourcePage() {
   const cfg = RESOURCES[resource];
   const { can, hasPermission } = useAuth();
   const { toast, confirm } = useUi();
-  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", limit: "25", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
+  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", sort: "", dir: "", limit: "25", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
   const [search, setSearch] = useState(f.q);
   const q = useDebounced(search);
   const [editing, setEditing] = useState(null); // null | 'new' | record
@@ -118,8 +118,12 @@ export default function ResourcePage() {
     if (editing?.id === row.id) setEditing(null);
   }
 
+  // Every labelled column is a table column the server can sort by (crud.factory.js: schema keys + `sortable`)
   const columns = [
-    ...cfg.columns.map((c) => ({ key: c.key, label: c.label ?? "", width: c.type === "image" || c.type === "youtube" ? 64 : undefined, render: (r) => cell(c, r) })),
+    ...cfg.columns.map((c) => ({
+      key: c.key, label: c.label ?? "", width: c.type === "image" || c.type === "youtube" ? 64 : undefined, render: (r) => cell(c, r),
+      sortKey: c.label ? c.key : undefined, sortFirst: c.type === "datetime" ? "desc" : "asc",
+    })),
     { key: "_actions", label: "Actions", render: (r) => (
       <div className="row-actions" onClick={(e) => e.stopPropagation()}>
         {!trashed && cfg.can.toggle && !cfg.noActiveFilter && (
@@ -171,7 +175,8 @@ export default function ResourcePage() {
       </div>
 
       <section className="panel panel--flush">
-        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} startIndex={data?.meta ? (data.meta.page - 1) * data.meta.limit : 0} total={data?.meta?.total} />
+        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} startIndex={data?.meta ? (data.meta.page - 1) * data.meta.limit : 0} total={data?.meta?.total}
+          sort={{ key: f.sort, dir: f.dir, onSort: setF, clearable: true }} />
         <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} />
       </section>
 

@@ -1,5 +1,5 @@
-import { AlertTriangle, Award, CheckCircle2, Copy, Download, Mail, MessageSquareWarning, RotateCcw, Star, Trash2, Undo2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertTriangle, Award, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Mail, MessageSquareWarning, RotateCcw, Star, Trash2, Undo2, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { api, apiError, assetUrl, downloadFile } from "../lib/api.js";
@@ -22,7 +22,12 @@ const NOTES = [
   "इंटरनेटवरील / डिजिटल फेरफार केलेले छायाचित्र स्वीकारले जाणार नाही.",
 ];
 
-export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
+/**
+ * onReviewed(registration): called after a review decision instead of onChanged — a review queue uses it to move on
+ * to the next record.
+ * nav: { prev, next, position } — previous / next record buttons (and ← / → keys); prev / next null at the ends.
+ */
+export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed, nav }) {
   const { hasPermission } = useAuth();
   const { toast } = useUi();
   const [data, setData] = useState(null);
@@ -31,14 +36,39 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState({});
+  const top = useRef(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) return undefined;
+    let current = true; // moving to another record quickly must never show this response for that record
     setData(null);
+    setError(null);
     setMode(null);
     setNote("");
-    api.get(`/admin/registrations/${id}`).then((r) => setData(r.data.data)).catch((e) => setError(apiError(e)));
+    setEdit({});
+    top.current?.parentElement?.scrollTo({ top: 0 });
+    api.get(`/admin/registrations/${id}`)
+      .then((r) => current && setData(r.data.data))
+      .catch((e) => current && setError(apiError(e)));
+    return () => {
+      current = false;
+    };
   }, [id]);
+
+  // ← / → move through the queue (not while typing a note or while a decision is being saved)
+  useEffect(() => {
+    if (!id || !nav) return undefined;
+    const onKey = (e) => {
+      if (busy || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      const go = e.key === "ArrowLeft" ? nav.prev : e.key === "ArrowRight" ? nav.next : null;
+      if (!go) return;
+      e.preventDefault();
+      go();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [id, nav, busy]);
 
   async function run(action) {
     if (ACTIONS[action].needsNote && mode !== action) {
@@ -46,14 +76,17 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
       return;
     }
     if (ACTIONS[action].needsNote && !note.trim()) return toast("Please write a note for the participant", "error");
+    // Always the record on screen (data), not the requested one (id), which may already point at the next record
+    const rid = data.id;
     setBusy(true);
     try {
-      const { data: res } = await api.post(`/admin/registrations/${id}/review`, { action, note: note.trim() || undefined });
-      setData(res.data);
+      const { data: res } = await api.post(`/admin/registrations/${rid}/review`, { action, note: note.trim() || undefined });
+      setData((d) => (d?.id === rid ? res.data : d));
       setMode(null);
       setNote("");
       toast(action === "verify" ? "Verified — certificate issued" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
-      onChanged?.();
+      if (onReviewed) onReviewed(res.data);
+      else onChanged?.();
     } catch (err) {
       toast(apiError(err).message, "error");
     } finally {
@@ -78,7 +111,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
     try {
       const payload = { ...edit };
       ["district_id", "fort_id", "members_count"].forEach((k) => k in payload && (payload[k] = payload[k] ? Number(payload[k]) : null));
-      const { data: res } = await api.put(`/admin/registrations/${id}`, payload);
+      const { data: res } = await api.put(`/admin/registrations/${data.id}`, payload);
       setData(res.data);
       setMode(null);
       toast("Details updated");
@@ -91,7 +124,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
   }
 
   async function restore() {
-    const { data: res } = await api.post(`/admin/registrations/${id}/restore`);
+    const { data: res } = await api.post(`/admin/registrations/${data.id}/restore`);
     setData(res.data);
     toast("Restored");
     onChanged?.();
@@ -106,20 +139,36 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
 
   return (
     <Drawer open={Boolean(id)} onClose={onClose} wide title={r ? <>{r.registration_no} <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge></> : "Registration"}
+      actions={nav && (
+        <div className="drawer-nav" role="group" aria-label="Review queue">
+          <button type="button" className="icon-btn" onClick={nav.prev} disabled={!nav.prev || busy} title="Previous record (←)" aria-label="Previous record"><ChevronLeft size={18} /></button>
+          <span className="drawer-nav__pos" aria-live="polite">{nav.position}</span>
+          <button type="button" className="icon-btn" onClick={nav.next} disabled={!nav.next || busy} title="Next record (→)" aria-label="Next record"><ChevronRight size={18} /></button>
+        </div>
+      )}
       footer={r && !r.deleted_at && r.status !== "verified" && mode !== "edit" && (
         <div className="review-bar">
           {mode && ACTIONS[mode]?.needsNote && (
             <div className="review-bar__note">
-              <label htmlFor="review-note">Note to participant (shown on their status page)</label>
-              <textarea id="review-note" className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} autoFocus />
+              <label htmlFor="review-note">
+                {mode === "reject" ? "Reason for rejection (shown on their status page and emailed to the participant)" : "Note to participant (shown on their status page)"}
+                <span className="req">*</span>
+              </label>
+              <textarea id="review-note" className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required aria-required="true" aria-describedby="review-note-hint" autoFocus />
+              <small id="review-note-hint" className="field__hint">
+                {mode === "reject"
+                  ? r.email ? `Required. Emailed to ${r.email} with a link to register again with a proper photo.` : "Required. This participant has no email address — they will see the reason on their status page only."
+                  : "Required."}
+              </small>
               <div className="chips">{NOTES.map((n) => <button key={n} type="button" className="chip" onClick={() => setNote(n)}>{n.slice(0, 38)}…</button>)}</div>
             </div>
           )}
           <div className="review-bar__actions">
+            {onReviewed && !mode && <span className="review-bar__hint">The next record opens after your decision</span>}
             {(r.status === "rejected" || r.status === "duplicate" ? ["verify", "reset"] : ["verify", "mark_duplicate", "reject"]).map((a) => {
               const { label, icon: Icon, cls } = ACTIONS[a];
               return (
-                <button key={a} type="button" className={`btn ${mode === a ? (a === "reject" ? "btn--danger" : "btn--primary") : cls}`} disabled={busy} onClick={() => run(a)}>
+                <button key={a} type="button" className={`btn ${mode === a ? (a === "reject" ? "btn--danger" : "btn--primary") : cls}`} disabled={busy || (mode === a && ACTIONS[a].needsNote && !note.trim())} onClick={() => run(a)}>
                   {busy && mode === a ? <Spinner /> : <Icon size={16} />} {mode === a ? `Confirm: ${label}` : label}
                 </button>
               );
@@ -129,6 +178,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
         </div>
       )}
     >
+      <div ref={top} aria-hidden="true" />
       {error && <div className="alert alert--error">{error.message}</div>}
       {!r && !error && <div className="page-loading"><Spinner size={22} /></div>}
       {r && (
@@ -187,7 +237,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
             <div className="stack">
               {mode === "edit" ? (
                 <div className="stack">
-                  {[["name", "Name (printed on certificate)"], ["organization_name", "Organisation"], ["members_count", "Members"], ["phone", "Mobile"], ["email", "Email"], ["city", "City"]].map(([k, label]) => (
+                  {[["name", "Name (printed on certificate)"], ["organization_name", "Organisation"], ["members_count", "Members"], ["phone", "Mobile"], ["whatsapp_number", "WhatsApp"], ["email", "Email"], ["city", "City"]].map(([k, label]) => (
                     <Field key={k} label={label}>{(p) => <input {...p} className="input" defaultValue={r[k] ?? ""} onChange={(e) => setEdit((s) => ({ ...s, [k]: e.target.value }))} />}</Field>
                   ))}
                   <Field label="District">{(p) => (
@@ -210,6 +260,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
                     <div><dt>Type</dt><dd>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}</dd></div>
                     {r.members_count && <div><dt>Members</dt><dd>{r.members_count}</dd></div>}
                     <div><dt>Mobile</dt><dd><a href={`tel:${r.phone}`}>{r.phone}</a></dd></div>
+                    <div><dt>WhatsApp</dt><dd>{r.whatsapp_number ? <a href={`https://wa.me/91${r.whatsapp_number}`} target="_blank" rel="noreferrer">{r.whatsapp_number}</a> : "—"}</dd></div>
                     <div><dt>Email</dt><dd>{r.email ? <a href={`mailto:${r.email}`}>{r.email}</a> : "—"}</dd></div>
                     <div><dt>Location</dt><dd className="mr">{[r.city, r.district, r.country !== "India" ? r.country : null].filter(Boolean).join(", ") || "—"}</dd></div>
                     <div><dt>Fort</dt><dd className="mr">{r.fort ?? "Other"}</dd></div>
@@ -223,11 +274,13 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged }) {
 
               {cert && (
                 <section className="cert-box">
-                  <h3><Award size={16} /> {cert.certificate_no}</h3>
+                  <h3><Award size={16} /> {cert.certificate_no} · दुर्गवीर क्र. {cert.durgveer_no}</h3>
                   <p className="muted">
                     {cert.revoked_at ? <Badge tone="danger">Revoked</Badge> : <Badge tone="success">Valid</Badge>} Issued {fmtDateTime(cert.issued_at)}
                     {cert.emailed_at && <> · <Mail size={12} /> emailed {fmtDateTime(cert.emailed_at)}</>} · downloaded {cert.download_count}×
+                    {!cert.emailed_at && cert.email_status && <> · email {cert.email_status === "skipped" ? "not sent (no address)" : cert.email_status}</>}
                   </p>
+                  {cert.email_status === "failed" && cert.email_error && <p className="muted">Email error: {cert.email_error}</p>}
                   {cert.revoke_reason && <p className="muted">Reason: {cert.revoke_reason}</p>}
                   <button type="button" className="btn btn--ghost btn--sm" onClick={() => downloadFile(`/admin/certificates/${r.id}/pdf`, null, `${cert.certificate_no}.pdf`, { open: true })}>
                     <Download size={14} /> Preview PDF
