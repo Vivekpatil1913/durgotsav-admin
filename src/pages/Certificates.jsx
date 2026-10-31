@@ -121,6 +121,9 @@ export default function Certificates() {
   const queue = useFetch("/admin/certificates/email-queue");
   const stats = queue.data?.data;
   const reloadQueue = queue.reload;
+  // Failed emails a plain "Retry failed" leaves alone: the mail server refused the address, which is not corrected yet
+  const rejected = stats?.rejected ?? 0;
+  const retryable = Math.max(0, (stats?.failed ?? 0) - rejected);
   // After a bulk action the queue is followed for a minute, even before its first emails are counted
   const [followUntil, setFollowUntil] = useState(0);
   const busy = followUntil > 0 || stats?.queued > 0 || stats?.processing > 0;
@@ -164,10 +167,27 @@ export default function Certificates() {
     }, "Queuing pending emails in the background — the delivery counts update as they go out");
   }
 
+  // The box retries rejected addresses as well (include_rejected): for a refusal that came from the sending side (relay
+  // or sender settings, now fixed), which the mail server reports like a bad address for every recipient
   async function retryFailed() {
-    if (!(await confirm({ title: "Retry failed emails?", message: "Failed certificate emails get a fresh set of attempts. Fix the cause first (SMTP login, quota, a missing photo). An address the mail server rejected is tried again only once it has been corrected.", confirmLabel: "Retry", tone: "primary" }))) return;
+    let includeRejected = false;
+    const message = (
+      <>
+        Failed certificate emails get a fresh set of attempts. Fix the cause first (SMTP login, quota, a missing photo).
+        An address the mail server rejected is tried again only once it has been corrected.
+        {rejected > 0 && (
+          <>
+            {" "}Tick the box if the refusal came from the sending side instead (relay or sender settings) and that is fixed.<br />
+            <label className="toggle" style={{ marginTop: 12 }}>
+              <input type="checkbox" onChange={(e) => { includeRejected = e.target.checked; }} /> Also retry {fmtNumber(rejected)} rejected
+            </label>
+          </>
+        )}
+      </>
+    );
+    if (!(await confirm({ title: "Retry failed emails?", message, confirmLabel: "Retry", tone: "primary" }))) return;
     act(async () => {
-      const { data: res } = await api.post("/admin/certificates/retry-failed");
+      const { data: res } = await api.post("/admin/certificates/retry-failed", includeRejected ? { include_rejected: true } : {});
       toast(`${fmtNumber(res.data.queued)} email(s) queued again`, "info");
       setFollowUntil(Date.now() + 60_000);
     }, "Retrying in the background");
@@ -200,7 +220,7 @@ export default function Certificates() {
         actions={(
           <>
             <button type="button" className="btn btn--ghost" title="Reload the list and the delivery counts" onClick={() => { reload(); reloadQueue(); }}><RotateCw size={16} /> Refresh</button>
-            {can("admin") && stats?.failed > 0 && <button type="button" className="btn btn--outline" onClick={retryFailed}><RefreshCw size={16} /> Retry failed ({fmtNumber(stats.failed)})</button>}
+            {can("admin") && stats?.failed > 0 && <button type="button" className="btn btn--outline" onClick={retryFailed}><RefreshCw size={16} /> Retry failed ({fmtNumber(retryable)}{rejected > 0 && ` + ${fmtNumber(rejected)} rejected`})</button>}
             {can("admin") && <button type="button" className="btn btn--primary" onClick={sendPending}><Mail size={16} /> Email pending</button>}
           </>
         )} />
