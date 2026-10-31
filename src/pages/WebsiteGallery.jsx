@@ -57,16 +57,35 @@ export default function WebsiteGallery() {
   const queryParams = clean({ ...f });
   const { data, loading, error, reload } = useFetch("/admin/website-gallery", queryParams);
 
+  // A single toggle updates its card and the counts in place (photo_id → shown) until the next fetch, instead of
+  // reloading the whole page
+  const [toggled, setToggled] = useState({});
+  useEffect(() => setToggled({}), [data]);
+
   const payload = data?.data ?? {};
-  const rows = payload.data ?? [];
+  const fetched = payload.data ?? [];
+  const rows = fetched.map((r) => (r.photo_id in toggled ? { ...r, is_featured: toggled[r.photo_id] } : r));
   const meta = payload.meta;
-  const counts = payload.counts ?? {
+  const loaded = payload.counts ?? {
     filter_total: 0,
     filter_selected: 0,
     filter_unselected: 0,
     total_verified: 0,
     total_on_website: 0,
     total_off_website: 0,
+  };
+  // Photos put on (+1) or taken off (-1) the website since the fetch
+  const shownSince = fetched.reduce(
+    (n, r) => (r.photo_id in toggled && toggled[r.photo_id] !== Boolean(r.is_featured) ? n + (toggled[r.photo_id] ? 1 : -1) : n),
+    0,
+  );
+  const counts = {
+    ...loaded,
+    total_on_website: loaded.total_on_website + shownSince,
+    total_off_website: loaded.total_off_website - shownSince,
+    // null when the server stopped counting a filtered list at its cap
+    filter_selected: loaded.filter_selected == null ? null : loaded.filter_selected + shownSince,
+    filter_unselected: loaded.filter_unselected == null ? null : loaded.filter_unselected - shownSince,
   };
 
   const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : [];
@@ -80,15 +99,21 @@ export default function WebsiteGallery() {
     }
     setBusyId(photo.photo_id);
     try {
-      await api.post("/admin/website-gallery/toggle", {
+      const res = await api.post("/admin/website-gallery/toggle", {
         photo_id: photo.photo_id,
         featured: targetFeatured,
       });
+      if (!res.data.data.updated) {
+        // Its registration is no longer an approved one in your divisions: the list is out of date
+        toast("This photo could not be changed. The list has been refreshed.", "error");
+        reload();
+        return;
+      }
       toast(targetFeatured ? "Added to website Home & Gallery display" : "Removed from website display");
+      setToggled((prev) => ({ ...prev, [photo.photo_id]: targetFeatured }));
       if (previewPhoto && previewPhoto.photo_id === photo.photo_id) {
         setPreviewPhoto((prev) => (prev ? { ...prev, is_featured: targetFeatured } : null));
       }
-      reload();
     } catch (err) {
       toast(apiError(err).message, "error");
     } finally {
@@ -185,7 +210,7 @@ export default function WebsiteGallery() {
           <span className="sr-only">Search</span>
           <input
             className="input"
-            placeholder="Participant, mobile, fort or reg. no"
+            placeholder="Participant, mobile, email or reg. no"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -274,7 +299,12 @@ export default function WebsiteGallery() {
         )}
 
         <span className="muted toolbar__count">
-          <strong>{fmtNumber(counts.filter_selected)}</strong> on website of {fmtNumber(counts.filter_total)} verified
+          {counts.filter_total_capped ? (
+            // The server stops counting a filtered list at its cap
+            <><strong>{fmtNumber(counts.filter_total)}+</strong> verified match</>
+          ) : (
+            <><strong>{fmtNumber(counts.filter_selected)}</strong> on website of {fmtNumber(counts.filter_total)} verified</>
+          )}
         </span>
       </div>
 
