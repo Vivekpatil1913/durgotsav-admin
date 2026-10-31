@@ -216,7 +216,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
               <textarea id="review-note" className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required aria-required="true" aria-describedby="review-note-hint" autoFocus />
               <small id="review-note-hint" className="field__hint">
                 {mode === "reject"
-                  ? r.email ? `Required. Emailed to ${r.email} with a link to register again with a proper photo.` : "Required. This participant has no email address — they will see the reason on their status page only."
+                  ? r.email ? `Required. Emailed to ${r.email}, with a link to register again with a proper photo while registration is open.` : "Required. This participant has no email address — they will see the reason on their status page only."
                   : "Required."}
               </small>
               <div className="chips">{NOTES.map((n) => <button key={n} type="button" className="chip" onClick={() => setNote(n)}>{n.slice(0, 38)}…</button>)}</div>

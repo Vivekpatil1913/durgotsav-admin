@@ -19,14 +19,20 @@ const istDay = (iso) => toIstInput(iso).slice(0, 10);
 const offEdition = (...values) => values.some((v) => v && Number(istDay(v).slice(0, 4)) !== EDITION_YEAR);
 // The public site shows {year} as the edition year, so such text needs no yearly edits
 const YEAR_HINT = `Write {year} for the edition year (${EDITION_YEAR}) — it updates by itself next year`;
+// What the website's Participation page shows right now (registration_status.reason), so it is clear which text comes from where
+const WEBSITE_SHOWS = {
+  open: "the registration form.",
+  not_started: "“Online registration will begin soon”, from the Opens date to the Closes date below (and the extra notice, if any).",
+  closed: "“Registration closed on” the Closes date below (and the extra notice, if any).",
+};
 
 const SECTIONS = [
   {
-    key: "registration", title: "Registration dates & notice", desc: "परिशिष्ट-अ §4. Shown on the website. These dates do not open or close the form — only the Registration form switch above does.",
+    key: "registration", title: "Registration dates & notice", desc: "परिशिष्ट-अ §4. While the form is closed the website shows these dates: until Closes as “will begin soon, Opens to Closes”, after it as “closed on Closes”. They do not open or close the form — only the Registration form switch above does.",
     fields: [
       ["opens_at", "Opens (IST)", "ist"],
       ["closes_at", "Closes (IST)", "ist"],
-      ["note", "Notice shown when registration is closed", "textarea"],
+      ["note", "Extra notice (optional)", "textarea", "Shown under the dates while the form is closed. Don't type a date: write {opens} or {closes} and the website shows the date above, so it changes when you change it."],
     ],
   },
   {
@@ -63,7 +69,7 @@ export default function Settings() {
   async function toggleRegistration(next) {
     const ok = await confirm(next
       ? { title: "Open registration?", message: "The registration form opens on the website for everyone right away, whatever the dates below say. It stays open until you turn this switch off.", confirmLabel: "Open registration", tone: "primary" }
-      : { title: "Close registration?", message: "The website shows the closed notice below instead of the form, whatever the dates say. Registrations already submitted are kept.", confirmLabel: "Close registration", tone: "danger" });
+      : { title: "Close registration?", message: "The website shows the registration dates below instead of the form, whatever they are. Registrations already submitted are kept.", confirmLabel: "Close registration", tone: "danger" });
     if (!ok) return;
     setSaving("registration_force_open");
     try {
@@ -112,7 +118,7 @@ export default function Settings() {
           <header className="panel__head">
             <div>
               <h2 id="set-registration-form">Registration form</h2>
-              <p className="muted">On: the form is open on the website. Off: it is closed and the website shows the notice below. Only this switch opens and closes it — the dates below don't. Saves as soon as you confirm.</p>
+              <p className="muted">On: the form is open on the website. Off: it is closed. Only this switch opens and closes the form — the dates below don't. Saves as soon as you confirm.</p>
             </div>
             <Badge tone={statusTone}>Registration: {statusLabel}</Badge>
           </header>
@@ -120,10 +126,11 @@ export default function Settings() {
             <div className="alert alert--warning"><AlertTriangle size={16} /> REGISTRATION_FORCE_OPEN=true is set in the server .env, so registration stays open whatever this switch says. Set it to false and restart the API to control it from here.</div>
           )}
           <label className="switch">
-            <input type="checkbox" checked={formOn} disabled={!canEdit || saving === "registration_force_open"} onChange={(e) => toggleRegistration(e.target.checked)} />
-            <span className="switch__track" aria-hidden="true" /> {formOn ? "On — the form is open on the website" : "Off — the form is closed (the website shows the notice below)"}
+            <input type="checkbox" checked={formOn} disabled={!canEdit || meta.registration_force_open_env || saving === "registration_force_open"} onChange={(e) => toggleRegistration(e.target.checked)} />
+            <span className="switch__track" aria-hidden="true" /> {meta.registration_force_open_env ? "Kept open by REGISTRATION_FORCE_OPEN in the server .env" : formOn ? "On — the form is open on the website" : "Off — the form is closed"}
             {saving === "registration_force_open" && <Spinner />}
           </label>
+          {status && <p className="muted small">Website now shows: {WEBSITE_SHOWS[status.reason] ?? "—"}</p>}
         </section>
         {SECTIONS.map((sec) => (
           <section key={sec.key} className="panel settings__section" aria-labelledby={`set-${sec.key}`}>
