@@ -19,20 +19,18 @@ const istDay = (iso) => toIstInput(iso).slice(0, 10);
 const offEdition = (...values) => values.some((v) => v && Number(istDay(v).slice(0, 4)) !== EDITION_YEAR);
 // The public site shows {year} as the edition year, so such text needs no yearly edits
 const YEAR_HINT = `Write {year} for the edition year (${EDITION_YEAR}) — it updates by itself next year`;
-const WINDOW = { open: ["Open now", "success"], not_started: ["Not started", "info"], closed: ["Closed", "danger"], disabled: ["Disabled", "danger"] };
 
 const SECTIONS = [
   {
-    key: "registration", title: "Registration window", desc: "परिशिष्ट-अ §4. Outside this window the website shows a notice instead of the form.",
+    key: "registration", title: "Registration dates & notice", desc: "परिशिष्ट-अ §4. Shown on the website. These dates do not open or close the form — only the Registration form switch above does.",
     fields: [
-      ["enabled", "Registration enabled (master switch)", "boolean"],
       ["opens_at", "Opens (IST)", "ist"],
       ["closes_at", "Closes (IST)", "ist"],
       ["note", "Notice shown when registration is closed", "textarea"],
     ],
   },
   {
-    key: "important_dates", title: "Important dates", desc: "Dates on the home page timeline cards. Display only — the Registration window above is what opens and closes the form.",
+    key: "important_dates", title: "Important dates", desc: "Dates on the home page timeline cards. Display only — the Registration form switch at the top opens and closes the form.",
     fields: [
       ["festival_begins", "Durgotsav Shubharambh (festival begins)", "date"],
       ["upload_opens", "Photo upload start", "date"],
@@ -62,17 +60,17 @@ export default function Settings() {
   const set = (section, key, v) => setValues((s) => ({ ...s, [section]: { ...s[section], [key]: v } }));
 
   // Saves on its own as soon as it is confirmed, so unsaved edits in the sections below are kept
-  async function toggleForceOpen(next) {
+  async function toggleRegistration(next) {
     const ok = await confirm(next
-      ? { title: "Force open registration?", message: "The registration form opens on the website for everyone right away, ignoring the registration window and master switch below. Turn it off again when you are done.", confirmLabel: "Force open", tone: "danger" }
-      : { title: "Stop forcing registration open?", message: "Registration follows the registration window and master switch again. Outside the window the website shows the closed notice instead of the form.", confirmLabel: "Turn off", tone: "primary" });
+      ? { title: "Open registration?", message: "The registration form opens on the website for everyone right away, whatever the dates below say. It stays open until you turn this switch off.", confirmLabel: "Open registration", tone: "primary" }
+      : { title: "Close registration?", message: "The website shows the closed notice below instead of the form, whatever the dates say. Registrations already submitted are kept.", confirmLabel: "Close registration", tone: "danger" });
     if (!ok) return;
     setSaving("registration_force_open");
     try {
       const { data } = await api.put("/admin/settings", { registration_force_open: next });
       setValues((s) => ({ ...s, registration_force_open: data.data.registration_force_open }));
       setMeta(data.meta ?? {});
-      toast(next ? "Registration forced open — the website updates within a minute" : "Force open turned off — the website updates within a minute");
+      toast(next ? "Registration opened — the website updates within a minute" : "Registration closed — the website updates within a minute");
     } catch (err) {
       toast(apiError(err).message, "error");
     } finally {
@@ -102,18 +100,19 @@ export default function Settings() {
   const dates = values.important_dates ?? {};
   const datesMismatch = Boolean(reg.opens_at && reg.closes_at && dates.upload_opens && dates.upload_closes)
     && (istDay(reg.opens_at) !== dates.upload_opens || istDay(reg.closes_at) !== dates.upload_closes);
-  const forceOpen = values.registration_force_open === true;
-  const [statusLabel, statusTone] = WINDOW[meta.registration_status?.reason] ?? ["—", "neutral"];
+  const formOn = values.registration_force_open === true;
+  const status = meta.registration_status;
+  const [statusLabel, statusTone] = !status ? ["—", "neutral"] : status.open ? ["Open now", "success"] : ["Closed", "danger"];
 
   return (
     <>
       <PageHeader title="Settings" crumbs={["System"]} subtitle="Site-wide content and behaviour. Each section saves separately." />
       <div className="settings">
-        <section className="panel settings__section" aria-labelledby="set-force-open">
+        <section className="panel settings__section" aria-labelledby="set-registration-form">
           <header className="panel__head">
             <div>
-              <h2 id="set-force-open">Force open registration</h2>
-              <p className="muted">Opens the registration form now, whatever the Registration window below says. Saves as soon as you confirm.</p>
+              <h2 id="set-registration-form">Registration form</h2>
+              <p className="muted">On: the form is open on the website. Off: it is closed and the website shows the notice below. Only this switch opens and closes it — the dates below don't. Saves as soon as you confirm.</p>
             </div>
             <Badge tone={statusTone}>Registration: {statusLabel}</Badge>
           </header>
@@ -121,8 +120,8 @@ export default function Settings() {
             <div className="alert alert--warning"><AlertTriangle size={16} /> REGISTRATION_FORCE_OPEN=true is set in the server .env, so registration stays open whatever this switch says. Set it to false and restart the API to control it from here.</div>
           )}
           <label className="switch">
-            <input type="checkbox" checked={forceOpen} disabled={!canEdit || saving === "registration_force_open"} onChange={(e) => toggleForceOpen(e.target.checked)} />
-            <span className="switch__track" aria-hidden="true" /> {forceOpen ? "On — the form is open for everyone" : "Off — registration follows the window below"}
+            <input type="checkbox" checked={formOn} disabled={!canEdit || saving === "registration_force_open"} onChange={(e) => toggleRegistration(e.target.checked)} />
+            <span className="switch__track" aria-hidden="true" /> {formOn ? "On — the form is open on the website" : "Off — the form is closed (the website shows the notice below)"}
             {saving === "registration_force_open" && <Spinner />}
           </label>
         </section>
@@ -136,14 +135,14 @@ export default function Settings() {
               <button type="button" className="btn btn--primary btn--sm" onClick={() => save(sec.key)} disabled={saving === sec.key}>{saving === sec.key ? <Spinner /> : <Save size={14} />} Save</button>
             </header>
             {sec.key === "registration" && offEdition(reg.opens_at, reg.closes_at) && (
-              <div className="alert alert--warning"><AlertTriangle size={16} /> The registration window is not in {EDITION_YEAR}, the current edition. Please check the dates.</div>
+              <div className="alert alert--warning"><AlertTriangle size={16} /> The registration dates are not in {EDITION_YEAR}, the current edition. Please check them.</div>
             )}
             {sec.key === "registration" && reg.opens_at && <p className="muted small">Currently: opens {fmtDateTime(reg.opens_at)}, closes {fmtDateTime(reg.closes_at)}</p>}
             {sec.key === "important_dates" && offEdition(dates.festival_begins, dates.upload_opens, dates.upload_closes) && (
               <div className="alert alert--warning"><AlertTriangle size={16} /> Some dates are not in {EDITION_YEAR}, the current edition. Please check them.</div>
             )}
             {sec.key === "important_dates" && datesMismatch && (
-              <div className="alert alert--warning"><AlertTriangle size={16} /> Upload dates differ from the Registration window ({fmtDateTime(reg.opens_at)} → {fmtDateTime(reg.closes_at)}). Participants can only submit within the Registration window.</div>
+              <div className="alert alert--warning"><AlertTriangle size={16} /> Upload dates differ from the registration dates ({fmtDateTime(reg.opens_at)} → {fmtDateTime(reg.closes_at)}). The website shows both, so keep them the same.</div>
             )}
             <div className="form-grid">
               {sec.fields.map(([key, label, type = "text", hint]) => {
