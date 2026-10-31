@@ -1,17 +1,29 @@
-import { AlertTriangle, Award, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Mail, MessageSquareWarning, RotateCcw, Star, Trash2, Undo2, XCircle } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Link2, Mail, MessageSquareText, MessageSquareWarning, Pencil, RefreshCw, RotateCcw, Trash2, Undo2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { api, apiError, assetUrl, downloadFile } from "../lib/api.js";
-import { fmtDateTime, PARTICIPANT_TYPES, STATUS } from "../lib/format.js";
+import { fmtDateTime, participantLine, STATUS } from "../lib/format.js";
 import { Badge, Drawer, Field, Spinner } from "./ui.jsx";
 
+// The certificate is generated only when an admin approves (after checking the photo and details); its email and SMS
+// are queued at that moment. Reject, request info, duplicate and "back to pending" withdraw it.
 const ACTIONS = {
-  verify: { label: "Verify & issue certificate", icon: CheckCircle2, cls: "btn--success" },
+  verify: { label: "Approve & generate certificate", icon: CheckCircle2, cls: "btn--success" },
   request_info: { label: "Request more info", icon: MessageSquareWarning, cls: "btn--ghost", needsNote: true },
   reject: { label: "Reject", icon: XCircle, cls: "btn--danger-ghost", needsNote: true },
   mark_duplicate: { label: "Mark as duplicate", icon: Copy, cls: "btn--warning-ghost" },
   reset: { label: "Move back to pending", icon: RotateCcw, cls: "btn--ghost" },
+};
+
+// SMS queue states (sms_messages.status)
+const SMS_STATUS = {
+  queued: "queued",
+  processing: "sending",
+  sent: "sent",
+  logged: "logged (no SMS gateway configured)",
+  failed: "failed",
+  cancelled: "cancelled",
 };
 
 // Canned notes for the common cases in परिशिष्ट-अ §3.4 / §6 (shown to the participant)
@@ -84,7 +96,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
       setData((d) => (d?.id === rid ? res.data : d));
       setMode(null);
       setNote("");
-      toast(action === "verify" ? "Verified — certificate issued" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
+      toast(action === "verify" ? "Approved — certificate generated, email and SMS queued" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
       if (onReviewed) onReviewed(res.data);
       else onChanged?.();
     } catch (err) {
@@ -114,7 +126,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
       const { data: res } = await api.put(`/admin/registrations/${data.id}`, payload);
       setData(res.data);
       setMode(null);
-      toast("Details updated");
+      toast(payload.name ? "Details updated — the certificate now prints the corrected name" : "Details updated");
       onChanged?.();
     } catch (err) {
       toast(apiError(err).message, "error");
@@ -130,12 +142,59 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
     onChanged?.();
   }
 
+  // Issues the certificate if the registration has none, makes a withdrawn one valid, renders it with the current name
+  async function regenerate() {
+    const rid = data.id;
+    const had = Boolean(data.certificate);
+    setBusy(true);
+    try {
+      const { data: res } = await api.post(`/admin/registrations/${rid}/certificate/regenerate`);
+      setData((d) => (d?.id === rid ? res.data : d));
+      toast(had ? "Certificate regenerated" : "Certificate issued");
+      onChanged?.();
+    } catch (err) {
+      toast(apiError(err).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The certificate link to the registered mobile again: queued, the background worker sends it within seconds
+  async function sendSms() {
+    const rid = data.id;
+    setBusy(true);
+    try {
+      await api.post(`/admin/registrations/${rid}/sms`);
+      toast("SMS queued — it goes out in a few seconds");
+      const fresh = await api.get(`/admin/registrations/${rid}`);
+      setData((d) => (d?.id === rid ? fresh.data.data : d));
+    } catch (err) {
+      toast(apiError(err).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyLink(link) {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast("Participant's link copied");
+    } catch {
+      toast(link);
+    }
+  }
+
   const r = data;
   // position 1 = main photo, 2 = optional second view; non-current rows are superseded uploads
   const current = r?.photos.find((p) => p.is_current && (p.position ?? 1) === 1);
   const second = r?.photos.find((p) => p.is_current && p.position === 2);
   const earlier = r?.photos.filter((p) => !p.is_current) ?? [];
   const cert = r?.certificate;
+  // only an approved registration has (or can be given) a certificate
+  const certifiable = r && !r.deleted_at && r.status === "verified";
+  const certValid = certifiable && cert && !cert.revoked_at;
+  const canCertificates = hasPermission("certificates", "write");
+  const canWrite = hasPermission("registrations", "write");
 
   return (
     <Drawer open={Boolean(id)} onClose={onClose} wide title={r ? <>{r.registration_no} <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge></> : "Registration"}
@@ -151,7 +210,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
           {mode && ACTIONS[mode]?.needsNote && (
             <div className="review-bar__note">
               <label htmlFor="review-note">
-                {mode === "reject" ? "Reason for rejection (shown on their status page and emailed to the participant)" : "Note to participant (shown on their status page)"}
+                {mode === "reject" ? "Reason for rejection (no certificate is generated; shown on their status page and emailed to the participant)" : "Note to participant (shown on their status page; they reply with a new photo or note, then it comes back for review)"}
                 <span className="req">*</span>
               </label>
               <textarea id="review-note" className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} required aria-required="true" aria-describedby="review-note-hint" autoFocus />
@@ -202,9 +261,9 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
               {second.duplicate_thumb_path && <img src={assetUrl(second.duplicate_thumb_path)} alt="Matching earlier photo" />}
             </div>
           )}
-          {r.same_phone_registrations.length > 0 && (
+          {r.same_phone_total > 0 && (
             <div className="alert alert--info">
-              This mobile number has {r.same_phone_registrations.length} other registration(s): {r.same_phone_registrations.map((s) => `${s.registration_no} (${STATUS[s.status].label})`).join(", ")}.
+              This mobile number has {r.same_phone_total}{r.same_phone_capped ? "+" : ""} other registration(s){r.same_phone_total > r.same_phone_registrations.length ? `; the newest ${r.same_phone_registrations.length}` : ""}: {r.same_phone_registrations.map((s) => `${s.registration_no} (${STATUS[s.status].label})`).join(", ")}.
             </div>
           )}
 
@@ -237,17 +296,22 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
             <div className="stack">
               {mode === "edit" ? (
                 <div className="stack">
-                  {[["name", "Name (printed on certificate)"], ["organization_name", "Organisation"], ["members_count", "Members"], ["phone", "Mobile"], ["whatsapp_number", "WhatsApp"], ["email", "Email"], ["city", "City"]].map(([k, label]) => (
+                  {/* What the single-page form collects; organisation, members, city and fort only on earlier registrations that have them */}
+                  {[["name", "Name (printed on certificate)"], ["phone", "Mobile"], ["whatsapp_number", "WhatsApp"], ["email", "Email"],
+                    ...(r.participant_type || r.organization_name ? [["organization_name", "Organisation"]] : []),
+                    ...(r.members_count ? [["members_count", "Members"]] : []),
+                    ...(r.city ? [["city", "City"]] : []),
+                  ].map(([k, label]) => (
                     <Field key={k} label={label}>{(p) => <input {...p} className="input" defaultValue={r[k] ?? ""} onChange={(e) => setEdit((s) => ({ ...s, [k]: e.target.value }))} />}</Field>
                   ))}
                   <Field label="District">{(p) => (
                     <select {...p} className="input" defaultValue={r.district_id ?? ""} onChange={(e) => setEdit((s) => ({ ...s, district_id: e.target.value }))}>
                       <option value="">—</option>{lookups.districts.map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
                     </select>)}</Field>
-                  <Field label="Fort">{(p) => (
+                  {r.fort_id && <Field label="Fort">{(p) => (
                     <select {...p} className="input" defaultValue={r.fort_id ?? ""} onChange={(e) => setEdit((s) => ({ ...s, fort_id: e.target.value }))}>
                       <option value="">Other fort</option>{lookups.forts.map((f) => <option key={f.id} value={f.id}>{f.name_mr}</option>)}
-                    </select>)}</Field>
+                    </select>)}</Field>}
                   <div className="cluster">
                     <button type="button" className="btn btn--primary" onClick={saveEdit} disabled={busy}>{busy && <Spinner />} Save</button>
                     <button type="button" className="btn btn--ghost" onClick={() => setMode(null)}>Cancel</button>
@@ -257,18 +321,33 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
                 <>
                   <dl className="kv">
                     <div><dt>Name</dt><dd className="mr">{r.name}</dd></div>
-                    <div><dt>Type</dt><dd>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}</dd></div>
-                    {r.members_count && <div><dt>Members</dt><dd>{r.members_count}</dd></div>}
+                    {participantLine(r) && <div><dt>Type</dt><dd>{participantLine(r)}</dd></div>}
                     <div><dt>Mobile</dt><dd><a href={`tel:${r.phone}`}>{r.phone}</a></dd></div>
                     <div><dt>WhatsApp</dt><dd>{r.whatsapp_number ? <a href={`https://wa.me/91${r.whatsapp_number}`} target="_blank" rel="noreferrer">{r.whatsapp_number}</a> : "—"}</dd></div>
                     <div><dt>Email</dt><dd>{r.email ? <a href={`mailto:${r.email}`}>{r.email}</a> : "—"}</dd></div>
                     <div><dt>Location</dt><dd className="mr">{[r.city, r.district, r.country !== "India" ? r.country : null].filter(Boolean).join(", ") || "—"}</dd></div>
-                    <div><dt>Fort</dt><dd className="mr">{r.fort ?? "Other"}</dd></div>
+                    {r.taluka && <div><dt>Taluka</dt><dd className="mr">{r.taluka}</dd></div>}
+                    {r.fort && <div><dt>Fort</dt><dd className="mr">{r.fort}</dd></div>}
                     {r.replica_notes && <div><dt>Notes</dt><dd className="mr">{r.replica_notes}</dd></div>}
                     <div><dt>Submitted</dt><dd>{fmtDateTime(r.created_at)} · {r.source}</dd></div>
                     {r.reviewed_at && <div><dt>Reviewed</dt><dd>{fmtDateTime(r.reviewed_at)}{r.reviewed_by_name ? ` by ${r.reviewed_by_name}` : ""}</dd></div>}
                     {r.review_note && <div><dt>Review note</dt><dd className="mr">{r.review_note}</dd></div>}
                   </dl>
+                  <div className="cluster">
+                    {/* SRS v2.1 §6: correct typing mistakes in the name (and other details) */}
+                    {canWrite && !r.deleted_at && (
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setEdit({}); setMode("edit"); }}>
+                        <Pencil size={14} /> Edit details
+                      </button>
+                    )}
+                    {/* what the participant sees (status now, certificate once approved) — the page the SMS links to */}
+                    {r.participant_link && (
+                      <>
+                        <a className="btn btn--ghost btn--sm" href={r.participant_link} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Participant page</a>
+                        <button type="button" className="btn btn--ghost btn--sm" onClick={() => copyLink(r.participant_link)}><Link2 size={14} /> Copy link</button>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
 
@@ -278,13 +357,59 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
                   <p className="muted">
                     {cert.revoked_at ? <Badge tone="danger">Revoked</Badge> : <Badge tone="success">Valid</Badge>} Issued {fmtDateTime(cert.issued_at)}
                     {cert.emailed_at && <> · <Mail size={12} /> emailed {fmtDateTime(cert.emailed_at)}</>} · downloaded {cert.download_count}×
-                    {!cert.emailed_at && cert.email_status && <> · email {cert.email_status === "skipped" ? "not sent (no address)" : cert.email_status}</>}
+                    {!cert.emailed_at && (!r.email ? <> · no email address (SMS link only)</> : cert.email_status && <> · email {cert.email_status === "skipped" ? "not sent (no address)" : cert.email_status}</>)}
                   </p>
                   {cert.email_status === "failed" && cert.email_error && <p className="muted">Email error: {cert.email_error}</p>}
                   {cert.revoke_reason && <p className="muted">Reason: {cert.revoke_reason}</p>}
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => downloadFile(`/admin/certificates/${r.id}/pdf`, null, `${cert.certificate_no}.pdf`, { open: true })}>
-                    <Download size={14} /> Preview PDF
-                  </button>
+                  {cert.regenerated_at && <p className="muted">Regenerated {fmtDateTime(cert.regenerated_at)}</p>}
+                  <div className="cluster">
+                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => downloadFile(`/admin/certificates/${r.id}/pdf`, null, `${cert.certificate_no}.pdf`, { open: true })}>
+                      <Download size={14} /> Preview PDF
+                    </button>
+                    {canCertificates && certifiable && (
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={regenerate} disabled={busy} title="Render the certificate again with the current name and photo (after correcting a typo); makes a withdrawn certificate valid again">
+                        {busy ? <Spinner /> : <RefreshCw size={14} />} Regenerate
+                      </button>
+                    )}
+                    {canWrite && certValid && (
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={sendSms} disabled={busy} title={`Send the certificate link to ${r.phone} by SMS`}>
+                        <MessageSquareText size={14} /> Send SMS
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
+              {!cert && certifiable && canCertificates && (
+                <section className="cert-box">
+                  <h3><Award size={16} /> No certificate yet</h3>
+                  <p className="muted">Approved before certificates were recorded here.</p>
+                  <div className="cluster">
+                    <button type="button" className="btn btn--primary btn--sm" onClick={regenerate} disabled={busy}>
+                      {busy ? <Spinner /> : <Award size={14} />} Generate certificate
+                    </button>
+                  </div>
+                </section>
+              )}
+              {!cert && r.status === "pending" && !r.deleted_at && (
+                <p className="muted">No certificate yet — it is generated when you approve this registration.</p>
+              )}
+
+              {r.sms?.length > 0 && (
+                <section>
+                  <h3 className="sub-title">SMS</h3>
+                  <ul className="activity">
+                    {r.sms.map((s) => (
+                      <li key={s.id}>
+                        <span className="activity__dot" aria-hidden="true" />
+                        <span>
+                          <strong>{s.purpose === "registration_ack" ? "Registration received" : "Certificate link"}</strong>
+                          {" · "}{SMS_STATUS[s.status] ?? s.status}{s.error && s.status !== "sent" ? ` — ${s.error}` : ""}
+                          {" · "}{s.requested_by_name ?? "automatic"} · {s.phone}
+                        </span>
+                        <time>{fmtDateTime(s.sent_at ?? s.created_at)}</time>
+                      </li>
+                    ))}
+                  </ul>
                 </section>
               )}
 

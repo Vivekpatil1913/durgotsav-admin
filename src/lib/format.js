@@ -16,8 +16,9 @@ export function timeAgo(v) {
   return fmtDate(v);
 }
 
+// pending: registered with a valid certificate (issued at submission, SRS v2.1), waiting for a photo review
 export const STATUS = {
-  pending: { label: "Pending", tone: "warning" },
+  pending: { label: "Pending review", tone: "warning" },
   info_requested: { label: "Info requested", tone: "info" },
   verified: { label: "Verified", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
@@ -33,5 +34,10 @@ export const PARTICIPANT_TYPES = {
   school: "School",
   college: "College",
 };
+
+// "Individual · Patil family": type and organisation as one line. Registrations from the single-page form (SRS v2.1)
+// have no type — the name field covers a person, organisation, family or society — and show only what they have.
+export const participantLine = (r) =>
+  [PARTICIPANT_TYPES[r.participant_type], r.organization_name, r.members_count ? `${r.members_count} members` : null].filter(Boolean).join(" · ");
 
 export const ROLES = { super_admin: "Super admin", admin: "Admin", moderator: "Moderator" };

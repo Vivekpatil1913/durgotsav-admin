@@ -10,7 +10,8 @@ import { clean, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtNumber, timeAgo } from "../lib/format.js";
 
-const QUICK_TOAST = { verify: "Verified — certificate issued", mark_duplicate: "Marked as duplicate", reset: "Moved back to pending" };
+// The certificate is generated only on approval; its email and SMS are queued then
+const QUICK_TOAST = { verify: "Approved — certificate generated, email and SMS queued", mark_duplicate: "Marked as duplicate", reset: "Moved back to pending" };
 
 // Photo-first review queue (the 2025 "प्रतिमा निवडा" screen, extended with reject / request-info).
 export default function Moderation() {
@@ -49,7 +50,7 @@ export default function Moderation() {
       const next = res.data;
       if (next.next_id) return open(next.next_id);
       open(null);
-      toast(next.total ? `Reached the end of this queue — ${fmtNumber(next.total)} still waiting` : "Queue is clear — nothing left to review", "info");
+      toast(next.total ? `Reached the end of this queue — ${fmtNumber(next.total)}${next.capped ? "+" : ""} still waiting` : "Queue is clear — nothing left to review", "info");
     } catch (err) {
       toast(apiError(err).message, "error");
     }
@@ -58,11 +59,13 @@ export default function Moderation() {
   // Only neighbours fetched for the record on screen count; while the new ones load, the buttons wait
   const here = around.data?.data?.id === openId ? around.data.data : null;
   const nav = openId && {
-    position: !here ? "…" : here.position ? `${fmtNumber(here.position)} of ${fmtNumber(here.total)}` : `– of ${fmtNumber(here.total)}`,
+    // Counting stops at 10,000 (capped): "1 of 10,000+"
+    position: !here ? "…" : `${here.position ? fmtNumber(here.position) : "–"} of ${fmtNumber(here.total)}${here.capped ? "+" : ""}`,
     prev: here?.prev_id ? () => open(here.prev_id) : null,
     next: here?.next_id ? () => open(here.next_id) : null,
   };
-  const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : [];
+  // District is the location the form asks for (SRS v2.1): every district is listed; a division narrows the list
+  const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : lookups.districts;
   const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
 
   async function quick(id, action) {
@@ -85,7 +88,7 @@ export default function Moderation() {
 
   return (
     <>
-      <PageHeader title="Photo review" crumbs={["Participation"]} subtitle="Oldest first. Verify valid photos; open a card to reject with a reason or request more information." />
+      <PageHeader title="Photo review" crumbs={["Participation"]} subtitle="Oldest first. Check each photo and its details: approving generates the participant's certificate and sends it by email and SMS; rejecting gives none. Open a card to give a reason or request more information." />
       <div className="resource-tabs" role="tablist" aria-label="Queue">
         {[["pending", "Pending"], ["verified", "Verified"], ["rejected", "Rejected"], ["duplicate", "Duplicates"]].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={f.status === k} className={`resource-tab ${f.status === k ? "is-active" : ""}`} onClick={() => setF({ status: k })}>{l}</button>
@@ -96,8 +99,8 @@ export default function Moderation() {
           <option value="">All divisions</option>
           {(lookups.divisions ?? []).map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
         </select>
-        <select className="input mr" aria-label="District" value={f.district_id} disabled={!f.division_id} onChange={(e) => setF({ district_id: e.target.value, taluka_id: "" })}>
-          <option value="">{f.division_id ? "All districts" : "Select division first"}</option>
+        <select className="input mr" aria-label="District" value={f.district_id} onChange={(e) => setF({ district_id: e.target.value, taluka_id: "" })}>
+          <option value="">All districts</option>
           {districts.map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
         </select>
         <select className="input mr" aria-label="Taluka" value={f.taluka_id} disabled={!f.district_id} onChange={(e) => setF({ taluka_id: e.target.value })}>
@@ -109,7 +112,7 @@ export default function Moderation() {
           {lookups.forts.map((x) => <option key={x.id} value={x.id}>{x.name_mr}</option>)}
         </select>
         {canBulk && <label className="toggle"><input type="checkbox" checked={allSelected} onChange={() => selection.onToggleAll(ids, !allSelected)} /> Select page</label>}
-        <span className="muted toolbar__count">{fmtNumber(data?.meta.total ?? 0)} in queue</span>
+        <span className="muted toolbar__count">{fmtNumber(data?.meta.total ?? 0)}{data?.meta.capped ? "+" : ""} in queue</span>
       </div>
 
       {error && <div className="alert alert--error">{error.message}</div>}
@@ -139,7 +142,7 @@ export default function Moderation() {
               {(r.status === "pending" || r.status === "info_requested") && (
                 <div className="photo-card__actions photo-card__actions--wrap">
                   <button type="button" className="btn btn--success btn--sm" disabled={busyId === r.id} onClick={() => quick(r.id, "verify")}>
-                    {busyId === r.id ? <Spinner /> : <CheckCircle2 size={14} />} Verify
+                    {busyId === r.id ? <Spinner /> : <CheckCircle2 size={14} />} Approve
                   </button>
                   <button type="button" className="btn btn--danger-ghost btn--sm" onClick={() => quick(r.id, "reject")}><XCircle size={14} /> Reject…</button>
                   <button type="button" className="btn btn--warning-ghost btn--sm" disabled={busyId === r.id} onClick={() => quick(r.id, "mark_duplicate")}><Copy size={14} /> Mark duplicate</button>

@@ -51,9 +51,10 @@ export function apiError(err) {
 
 export const assetUrl = (p) => (!p ? "" : /^https?:/.test(p) ? p : p.startsWith("/uploads/") ? `${API_URL}${p}` : `${SITE_URL}${p}`);
 
-// Fetches a protected binary (PDF / CSV) with the auth header and hands it to the browser.
+// Fetches a protected binary (PDF / CSV) with the auth header and hands it to the browser. No time limit: a full CSV
+// export streams for as long as it has rows.
 export async function downloadFile(url, params, filename, { open = false } = {}) {
-  const res = await api.get(url, { params, responseType: "blob" });
+  const res = await api.get(url, { params, responseType: "blob", timeout: 0 });
   const href = URL.createObjectURL(res.data);
   if (open) window.open(href, "_blank", "noopener");
   else Object.assign(document.createElement("a"), { href, download: filename }).click();

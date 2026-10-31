@@ -1848,6 +1848,8 @@ button.stat-card:hover {
   gap: 8px;
   margin-top: 18px;
 }
+/* Toasts never swallow a click meant for what is under them (e.g. the drawer's Reject button right after
+   "SMS sent"): only their × takes clicks. With a drawer open they sit at the top, clear of its action bar. */
 .toasts {
   position: fixed;
   right: 16px;
@@ -1856,6 +1858,11 @@ button.stat-card:hover {
   display: grid;
   gap: 8px;
   width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+body:has(.overlay--drawer) .toasts {
+  top: 76px;
+  bottom: auto;
 }
 .toast {
   display: flex;
@@ -1867,6 +1874,7 @@ button.stat-card:hover {
   color: #fff;
   box-shadow: var(--shadow-lg);
   font-size: 13.5px;
+  pointer-events: none;
 }
 .toast span {
   flex: 1;
@@ -1875,6 +1883,7 @@ button.stat-card:hover {
   border: 0;
   background: none;
   color: #b9a58b;
+  pointer-events: auto;
 }
 .toast--success svg:first-child {
   color: #7fd3a2;

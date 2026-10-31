@@ -19,7 +19,7 @@ export function BulkBar({ selection, photoIds, onDone }) {
       setNoteFor(action);
       return;
     }
-    if (action === "verify" && !(await confirm({ title: `Verify ${ids.length} registration(s)?`, message: "Certificates will be issued and emailed / sent to participants.", confirmLabel: "Verify all", tone: "primary" }))) return;
+    if (action === "verify" && !(await confirm({ title: `Approve ${ids.length} registration(s)?`, message: "Their certificates are generated now and sent to the participants by email and SMS in the background.", confirmLabel: "Approve all", tone: "primary" }))) return;
     if (action === "mark_duplicate" && !(await confirm({ title: `Mark ${ids.length} registration(s) as duplicate?`, message: "Participants will see that their photo was already used in another registration. Any certificates are revoked.", confirmLabel: "Mark duplicate", tone: "danger" }))) return;
     setBusy(true);
     try {
@@ -64,7 +64,7 @@ export function BulkBar({ selection, photoIds, onDone }) {
           ) : (
             <>
               <strong>{fmtNumber(ids.length)} selected</strong>
-              <button type="button" className="btn btn--success btn--sm" disabled={busy} onClick={() => review("verify")}><CheckCircle2 size={15} /> Verify</button>
+              <button type="button" className="btn btn--success btn--sm" disabled={busy} onClick={() => review("verify")}><CheckCircle2 size={15} /> Approve</button>
               <button type="button" className="btn btn--danger-ghost btn--sm" disabled={busy} onClick={() => review("reject")}><XCircle size={15} /> Reject</button>
               <button type="button" className="btn btn--warning-ghost btn--sm" disabled={busy} onClick={() => review("mark_duplicate")}><Copy size={15} /> Duplicate</button>
               <button type="button" className="icon-btn" onClick={selection.clear} aria-label="Clear selection"><X size={16} /></button>

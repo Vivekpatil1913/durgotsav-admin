@@ -9,7 +9,7 @@ import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
 import { clean, useQueryState } from "../hooks/useQueryState.js";
 import { apiError, assetUrl, downloadFile } from "../lib/api.js";
-import { fmtDateTime, PARTICIPANT_TYPES, STATUS } from "../lib/format.js";
+import { fmtDateTime, participantLine, STATUS } from "../lib/format.js";
 
 const DEFAULTS = { q: "", status: "", division_id: "", district_id: "", taluka_id: "", fort_id: "", from: "", to: "", duplicates: "", featured: "", trashed: "", sort: "created_at", dir: "desc", limit: "10", page: "1" };
 const SORTS = [
@@ -42,7 +42,8 @@ export default function Registrations() {
   const params = clean({ ...f });
   const { data, loading, error, reload } = useFetch("/admin/registrations", params);
   const rows = data?.data ?? [];
-  const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : [];
+  // District is the location the form asks for (SRS v2.1): every district is listed; a division narrows the list
+  const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : lookups.districts;
   const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
 
   const columns = [
@@ -51,11 +52,17 @@ export default function Registrations() {
     { key: "name", sortKey: "name", label: "Participant", render: (r) => (
       <div className="cell-stack">
         <strong className="mr">{r.name}</strong>
-        <small>{PARTICIPANT_TYPES[r.participant_type]}{r.organization_name ? ` · ${r.organization_name}` : ""}{r.members_count ? ` · ${r.members_count} members` : ""}</small>
+        {participantLine(r) && <small>{participantLine(r)}</small>}
       </div>
     ) },
     { key: "phone", sortKey: "phone", label: "Mobile", render: (r) => <span className="mono">{r.phone}</span> },
-    { key: "district", label: "District / fort", render: (r) => <div className="cell-stack mr"><span>{r.district ?? r.country}</span><small>{r.fort ?? "Other fort"}</small></div> },
+    // fort / taluka only on registrations made before the single-page form
+    { key: "district", label: "District", render: (r) => <div className="cell-stack mr"><span>{r.district ?? r.country}</span>{r.fort && <small>{r.fort}</small>}</div> },
+    { key: "certificate", label: "Certificate", render: (r) => (
+      r.certificate_no
+        ? <div className="cell-stack"><span className="mono">दुर्गवीर {r.durgveer_no}</span><small>{r.certificate_revoked_at ? "Withdrawn" : "Valid"}</small></div>
+        : <small className="muted">—</small>
+    ) },
     { key: "status", sortKey: "status", label: "Status", render: (r) => (
       <div className="cluster cluster--tight">
         <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
@@ -109,8 +116,8 @@ export default function Registrations() {
           <option value="">All divisions</option>
           {(lookups.divisions ?? []).map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
         </select>
-        <select className="input mr" aria-label="District" value={f.district_id} disabled={!f.division_id} onChange={(e) => setF({ district_id: e.target.value, taluka_id: "" })}>
-          <option value="">{f.division_id ? "All districts" : "Select division first"}</option>
+        <select className="input mr" aria-label="District" value={f.district_id} onChange={(e) => setF({ district_id: e.target.value, taluka_id: "" })}>
+          <option value="">All districts</option>
           {districts.map((d) => <option key={d.id} value={d.id}>{d.name_mr}</option>)}
         </select>
         <select className="input mr" aria-label="Taluka" value={f.taluka_id} disabled={!f.district_id} onChange={(e) => setF({ taluka_id: e.target.value })}>
