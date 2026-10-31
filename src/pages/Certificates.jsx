@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock, Download, History, Mail, MailX, RefreshCw, RotateCcw, Search, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Download, History, Mail, MailX, RefreshCw, RotateCcw, RotateCw, Search, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, DataTable, Drawer, PageHeader, Pagination, Spinner, StatCard } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -121,12 +121,28 @@ export default function Certificates() {
   const queue = useFetch("/admin/certificates/email-queue");
   const stats = queue.data?.data;
   const reloadQueue = queue.reload;
+  // After a bulk action the queue is followed for a minute, even before its first emails are counted
+  const [followUntil, setFollowUntil] = useState(0);
+  const busy = followUntil > 0 || stats?.queued > 0 || stats?.processing > 0;
 
-  // Keep the queue counts live while a bulk send is running
+  // Live queue counts while emails are going out (the server recounts every 15 s): polled only while this tab is
+  // visible and there is work, and once more as soon as the tab is looked at again
   useEffect(() => {
-    const t = setInterval(reloadQueue, 15_000);
-    return () => clearInterval(t);
-  }, [reloadQueue]);
+    if (!busy) return undefined;
+    const refresh = () => document.visibilityState === "visible" && reloadQueue();
+    const t = setInterval(refresh, 15_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [busy, reloadQueue]);
+
+  useEffect(() => {
+    if (!followUntil) return undefined;
+    const t = setTimeout(() => setFollowUntil(0), Math.max(0, followUntil - Date.now()));
+    return () => clearTimeout(t);
+  }, [followUntil]);
 
   const act = async (fn, ok) => {
     try {
@@ -139,19 +155,21 @@ export default function Certificates() {
     }
   };
 
+  // The server queues them in the background (it answers at once); a second run while one is going is refused
   async function sendPending() {
-    if (!(await confirm({ title: "Email all pending certificates?", message: "Every verified participant with an email who has not yet received their certificate will be queued. Each participant is emailed once.", confirmLabel: "Queue emails", tone: "primary" }))) return;
+    if (!(await confirm({ title: "Email all pending certificates?", message: "Every verified participant with an email who has not yet received their certificate will be queued, in the background. Each participant is emailed once.", confirmLabel: "Queue emails", tone: "primary" }))) return;
     act(async () => {
-      const { data: res } = await api.post("/admin/certificates/send-pending");
-      toast(`${fmtNumber(res.data.queued)} email(s) queued`, "info");
-    }, "Sending in the background");
+      await api.post("/admin/certificates/send-pending");
+      setFollowUntil(Date.now() + 60_000);
+    }, "Queuing pending emails in the background — the delivery counts update as they go out");
   }
 
   async function retryFailed() {
-    if (!(await confirm({ title: "Retry failed emails?", message: "Failed certificate emails get a fresh set of attempts. Fix the cause first (SMTP login, quota, a missing photo or a wrong address).", confirmLabel: "Retry", tone: "primary" }))) return;
+    if (!(await confirm({ title: "Retry failed emails?", message: "Failed certificate emails get a fresh set of attempts. Fix the cause first (SMTP login, quota, a missing photo). An address the mail server rejected is tried again only once it has been corrected.", confirmLabel: "Retry", tone: "primary" }))) return;
     act(async () => {
       const { data: res } = await api.post("/admin/certificates/retry-failed");
       toast(`${fmtNumber(res.data.queued)} email(s) queued again`, "info");
+      setFollowUntil(Date.now() + 60_000);
     }, "Retrying in the background");
   }
 
@@ -179,10 +197,11 @@ export default function Certificates() {
   return (
     <>
       <PageHeader title="Certificates" crumbs={["Participation"]} subtitle="Digital अभिनंदन पत्र issued on verification and emailed automatically."
-        actions={can("admin") && (
+        actions={(
           <>
-            {stats?.failed > 0 && <button type="button" className="btn btn--outline" onClick={retryFailed}><RefreshCw size={16} /> Retry failed ({fmtNumber(stats.failed)})</button>}
-            <button type="button" className="btn btn--primary" onClick={sendPending}><Mail size={16} /> Email pending</button>
+            <button type="button" className="btn btn--ghost" title="Reload the list and the delivery counts" onClick={() => { reload(); reloadQueue(); }}><RotateCw size={16} /> Refresh</button>
+            {can("admin") && stats?.failed > 0 && <button type="button" className="btn btn--outline" onClick={retryFailed}><RefreshCw size={16} /> Retry failed ({fmtNumber(stats.failed)})</button>}
+            {can("admin") && <button type="button" className="btn btn--primary" onClick={sendPending}><Mail size={16} /> Email pending</button>}
           </>
         )} />
       <QueueSummary stats={stats} onFilter={(s) => setF({ email_status: s })} />
