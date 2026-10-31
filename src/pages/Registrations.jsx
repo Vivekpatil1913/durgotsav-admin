@@ -29,6 +29,7 @@ export default function Registrations() {
   const { toast } = useUi();
   const [f, setF] = useQueryState(DEFAULTS);
   const [search, setSearch] = useState(f.q);
+  const [exporting, setExporting] = useState(false);
   const q = useDebounced(search);
   const [openId, setOpenId] = useState(null);
   const selection = useSelection();
@@ -74,10 +75,13 @@ export default function Registrations() {
   ];
 
   async function exportCsv() {
+    setExporting(true);
     try {
       await downloadFile("/admin/registrations/export.csv", clean({ ...f, page: undefined }), `durgotsav-${EDITION_YEAR}-registrations.csv`);
     } catch (err) {
       toast(apiError(err).message, "error");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -87,7 +91,7 @@ export default function Registrations() {
         title="Registrations"
         crumbs={["Participation"]}
         subtitle="Every participant submission. Click a row to review, edit or verify."
-        actions={<button type="button" className="btn btn--ghost" onClick={exportCsv}><Download size={16} /> Export CSV</button>}
+        actions={<button type="button" className="btn btn--ghost" onClick={exportCsv} disabled={exporting}><Download size={16} /> {exporting ? "Exporting…" : "Export CSV"}</button>}
       />
 
       <div className="resource-tabs">
@@ -108,6 +112,8 @@ export default function Registrations() {
           <span className="sr-only">Search</span>
           <input className="input" placeholder="Name, mobile, email or reg. no" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
+        {/* Search matches 3 or more characters (or a whole registration number); shorter text finds nothing */}
+        {search.trim().length > 0 && search.trim().length < 3 && <small className="field__hint">Type at least 3 characters, or a full registration number</small>}
         <select className="input" aria-label="Status" value={f.status} onChange={(e) => setF({ status: e.target.value })}>
           <option value="">All statuses</option>
           {Object.entries(STATUS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}

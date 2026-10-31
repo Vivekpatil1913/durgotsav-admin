@@ -54,7 +54,20 @@ export const assetUrl = (p) => (!p ? "" : /^https?:/.test(p) ? p : p.startsWith(
 // Fetches a protected binary (PDF / CSV) with the auth header and hands it to the browser. No time limit: a full CSV
 // export streams for as long as it has rows.
 export async function downloadFile(url, params, filename, { open = false } = {}) {
-  const res = await api.get(url, { params, responseType: "blob", timeout: 0 });
+  let res;
+  try {
+    res = await api.get(url, { params, responseType: "blob", timeout: 0 });
+  } catch (err) {
+    // An error answer arrives as a Blob too: read its JSON so apiError() shows the server's message
+    if (err?.response?.data instanceof Blob) {
+      try {
+        err.response.data = JSON.parse(await err.response.data.text());
+      } catch {
+        /* not JSON — keep the generic message */
+      }
+    }
+    throw err;
+  }
   const href = URL.createObjectURL(res.data);
   if (open) window.open(href, "_blank", "noopener");
   else Object.assign(document.createElement("a"), { href, download: filename }).click();
