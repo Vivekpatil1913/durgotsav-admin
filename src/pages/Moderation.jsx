@@ -11,7 +11,7 @@ import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtNumber, timeAgo } from "../lib/format.js";
 
 // The certificate is generated only on approval; its email and SMS are queued then
-const QUICK_TOAST = { verify: "Approved — certificate generated, email and SMS queued", mark_duplicate: "Marked as duplicate", reset: "Moved back to pending" };
+const QUICK_TOAST = { verify: "Certificate generated", mark_duplicate: "Marked as duplicate", reset: "Moved back to pending" };
 
 // Photo-first review queue (the 2025 "प्रतिमा निवडा" screen, extended with reject / request-info).
 export default function Moderation() {
@@ -50,7 +50,6 @@ export default function Moderation() {
       const next = res.data;
       if (next.next_id) return open(next.next_id);
       open(null);
-      toast(next.total ? `Reached the end of this queue — ${fmtNumber(next.total)}${next.capped ? "+" : ""} still waiting` : "Queue is clear — nothing left to review", "info");
     } catch (err) {
       toast(apiError(err).message, "error");
     }

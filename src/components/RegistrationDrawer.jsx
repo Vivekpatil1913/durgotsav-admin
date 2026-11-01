@@ -96,7 +96,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
       setData((d) => (d?.id === rid ? res.data : d));
       setMode(null);
       setNote("");
-      toast(action === "verify" ? "Approved — certificate generated, email and SMS queued" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
+      toast(action === "verify" ? "Certificate generated" : action === "mark_duplicate" ? "Marked as duplicate" : `Registration ${STATUS[res.data.status].label.toLowerCase()}`);
       if (onReviewed) onReviewed(res.data);
       else onChanged?.();
     } catch (err) {
