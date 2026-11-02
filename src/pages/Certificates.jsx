@@ -8,6 +8,9 @@ import { clean, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, downloadFile } from "../lib/api.js";
 import { fmtDateTime, fmtNumber, timeAgo } from "../lib/format.js";
 
+// Rows per page; the server pages the list
+const PAGE_SIZE = 10;
+
 // certificate_email_jobs.status
 const EMAIL_STATUS = {
   queued: { label: "Queued", tone: "info" },
@@ -109,7 +112,7 @@ function DeliveryLog({ cert, onClose }) {
 export default function Certificates() {
   const { can } = useAuth();
   const { toast, confirm } = useUi();
-  const [f, setF] = useQueryState({ q: "", state: "", emailed: "", email_status: "", sort: "issued_at", dir: "desc", limit: "25", page: "1" });
+  const [f, setF] = useQueryState({ q: "", state: "", emailed: "", email_status: "", sort: "issued_at", dir: "desc", page: "1" });
   const [search, setSearch] = useState(f.q);
   const [logFor, setLogFor] = useState(null);
   const q = useDebounced(search);
@@ -117,7 +120,7 @@ export default function Certificates() {
     if (q !== f.q) setF({ q });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
-  const { data, loading, error, reload } = useFetch("/admin/certificates", clean({ ...f }));
+  const { data, loading, error, reload } = useFetch("/admin/certificates", clean({ ...f, limit: PAGE_SIZE }));
   const queue = useFetch("/admin/certificates/email-queue");
   const stats = queue.data?.data;
   const reloadQueue = queue.reload;
@@ -246,9 +249,9 @@ export default function Certificates() {
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={data?.data} loading={loading} error={error} rowKey={(c) => c.id}
           sort={{ key: f.sort, dir: f.dir, onSort: setF }}
-          startIndex={((data?.meta?.page ?? 1) - 1) * (data?.meta?.limit ?? 25)}
+          startIndex={((data?.meta?.page ?? 1) - 1) * PAGE_SIZE}
           empty="No certificates yet — they are issued when a registration is verified" />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
       </section>
       <DeliveryLog cert={logFor} onClose={() => setLogFor(null)} />
     </>
