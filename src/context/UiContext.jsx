@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 
 const UiContext = createContext(null);
 const ICONS = { success: CheckCircle2, error: XCircle, info: Info, warning: AlertTriangle };
+// confirm({ tone }): "danger" (default), "primary" or "success" — colours the icon and the confirm button
+const CONFIRM_BTN = { danger: "btn--danger", success: "btn--success" };
 
 // Toasts + a promise-based confirm dialog: `if (await confirm({...})) doIt()`.
 export function UiProvider({ children }) {
@@ -29,9 +31,15 @@ export function UiProvider({ children }) {
   useEffect(() => {
     if (!dialog) return undefined;
     confirmBtn.current?.focus();
-    const onKey = (e) => e.key === "Escape" && close(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // The dialog is modal: keys stop here (capture phase), so Escape does not also close a drawer behind it and ← / →
+    // do not move a review drawer to another record while its decision is being confirmed. Enter / Space still press
+    // the focused button (that is the browser's default action, not propagation).
+    const onKey = (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") close(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialog]);
 
@@ -56,12 +64,12 @@ export function UiProvider({ children }) {
         {dialog && (
           <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={(e) => e.target === e.currentTarget && close(false)}>
             <motion.div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title" initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}>
-              <div className={`dialog__icon dialog__icon--${dialog.tone}`}><AlertTriangle aria-hidden="true" /></div>
+              <div className={`dialog__icon dialog__icon--${dialog.tone}`}>{dialog.tone === "success" ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}</div>
               <h2 id="dlg-title">{dialog.title}</h2>
               {dialog.message && <p>{dialog.message}</p>}
               <div className="dialog__actions">
                 <button type="button" className="btn btn--ghost" onClick={() => close(false)}>Cancel</button>
-                <button ref={confirmBtn} type="button" className={`btn ${dialog.tone === "danger" ? "btn--danger" : "btn--primary"}`} onClick={() => close(true)}>{dialog.confirmLabel}</button>
+                <button ref={confirmBtn} type="button" className={`btn ${CONFIRM_BTN[dialog.tone] ?? "btn--primary"}`} onClick={() => close(true)}>{dialog.confirmLabel}</button>
               </div>
             </motion.div>
           </motion.div>

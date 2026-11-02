@@ -19,7 +19,8 @@ export function BulkBar({ selection, photoIds, onDone }) {
       setNoteFor(action);
       return;
     }
-    if (action === "verify" && !(await confirm({ title: `Approve ${ids.length} registration(s)?`, message: "Their certificates are generated now and sent to the participants by email and SMS in the background.", confirmLabel: "Approve all", tone: "primary" }))) return;
+    if (action === "verify" && !(await confirm({ title: `Approve ${ids.length} registration(s)?`, message: "Their certificates are generated now and sent to the participants by email and SMS in the background.", confirmLabel: "Approve all", tone: "success" }))) return;
+    if (action === "reject" && !(await confirm({ title: `Reject ${ids.length} registration(s)?`, message: <>No certificates are generated. Participants get this reason on their status page (and by email, if given): <span className="mr">“{note.trim()}”</span></>, confirmLabel: "Reject all", tone: "danger" }))) return;
     if (action === "mark_duplicate" && !(await confirm({ title: `Mark ${ids.length} registration(s) as duplicate?`, message: "Participants will see that their photo was already used in another registration. Any certificates are revoked.", confirmLabel: "Mark duplicate", tone: "danger" }))) return;
     setBusy(true);
     try {

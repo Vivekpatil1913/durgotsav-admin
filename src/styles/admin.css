@@ -1835,6 +1835,15 @@ button.stat-card:hover {
   background: var(--brand-50);
   color: var(--brand);
 }
+.dialog__icon--success {
+  background: var(--success-50);
+  color: var(--success);
+}
+.dialog__who {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+}
 .dialog h2 {
   font-size: 17px;
 }

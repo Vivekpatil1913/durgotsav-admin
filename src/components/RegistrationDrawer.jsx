@@ -16,6 +16,44 @@ const ACTIONS = {
   reset: { label: "Move back to pending", icon: RotateCcw, cls: "btn--ghost" },
 };
 
+/**
+ * Approve / reject / mark duplicate always go through a confirm dialog that names the record and says what the
+ * participant gets. r: the registration (name, registration_no, email when known); note: the rejection reason.
+ * Resolves true for actions that need no confirmation (e.g. "back to pending").
+ */
+export function confirmReview(confirm, action, r, note = "") {
+  const who = <strong className="dialog__who"><span className="mr">{r.name}</span> · {r.registration_no}</strong>;
+  // the photo-review cards do not carry the email address; the drawer's record does
+  const email = r.email === undefined ? " (and email, if given)" : r.email ? " and email" : "";
+  const byEmail = r.email === undefined ? " (and by email, if given)" : r.email ? " and by email" : "";
+  const opts = {
+    verify: {
+      title: "Approve this registration?",
+      message: <>{who}The certificate is generated now and sent to the participant by SMS{email}.</>,
+      confirmLabel: "Approve & generate certificate",
+      tone: "success",
+    },
+    reject: {
+      title: "Reject this registration?",
+      message: <>{who}No certificate is generated. The participant gets this reason on their status page{byEmail}:<span className="mr">“{note}”</span></>,
+      confirmLabel: "Reject",
+      tone: "danger",
+    },
+    mark_duplicate: {
+      title: "Mark as duplicate?",
+      message: <>{who}The participant will see that this photo was already used in another registration. Any certificate is revoked.</>,
+      confirmLabel: "Mark duplicate",
+      tone: "danger",
+    },
+  }[action];
+  return opts ? confirm(opts) : Promise.resolve(true);
+}
+
+// "Edit details" and the certificate's "Send SMS" are hidden (client's request, 2026-11-02); their code stays, so true
+// brings a button back
+const SHOW_EDIT_DETAILS = false;
+const SHOW_SEND_SMS = false;
+
 // SMS queue states (sms_messages.status)
 const SMS_STATUS = {
   queued: "queued",
@@ -41,7 +79,7 @@ const NOTES = [
  */
 export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed, nav }) {
   const { hasPermission } = useAuth();
-  const { toast } = useUi();
+  const { toast, confirm } = useUi();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null); // 'reject' | 'request_info' | 'edit'
@@ -90,6 +128,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
     if (ACTIONS[action].needsNote && !note.trim()) return toast("Please write a note for the participant", "error");
     // Always the record on screen (data), not the requested one (id), which may already point at the next record
     const rid = data.id;
+    if (!(await confirmReview(confirm, action, data, note.trim()))) return;
     setBusy(true);
     try {
       const { data: res } = await api.post(`/admin/registrations/${rid}/review`, { action, note: note.trim() || undefined });
@@ -228,7 +267,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
               const { label, icon: Icon, cls } = ACTIONS[a];
               return (
                 <button key={a} type="button" className={`btn ${mode === a ? (a === "reject" ? "btn--danger" : "btn--primary") : cls}`} disabled={busy || (mode === a && ACTIONS[a].needsNote && !note.trim())} onClick={() => run(a)}>
-                  {busy && mode === a ? <Spinner /> : <Icon size={16} />} {mode === a ? `Confirm: ${label}` : label}
+                  {busy && mode === a ? <Spinner /> : <Icon size={16} />} {label}
                 </button>
               );
             })}
@@ -335,7 +374,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
                   </dl>
                   <div className="cluster">
                     {/* SRS v2.1 §6: correct typing mistakes in the name (and other details) */}
-                    {canWrite && !r.deleted_at && (
+                    {SHOW_EDIT_DETAILS && canWrite && !r.deleted_at && (
                       <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setEdit({}); setMode("edit"); }}>
                         <Pencil size={14} /> Edit details
                       </button>
@@ -357,7 +396,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
                   <p className="muted">
                     {cert.revoked_at ? <Badge tone="danger">Revoked</Badge> : <Badge tone="success">Valid</Badge>} Issued {fmtDateTime(cert.issued_at)}
                     {cert.emailed_at && <> · <Mail size={12} /> emailed {fmtDateTime(cert.emailed_at)}</>} · downloaded {cert.download_count}×
-                    {!cert.emailed_at && (!r.email ? <> · no email address (SMS link only)</> : cert.email_status && <> · email {cert.email_status === "skipped" ? "not sent (no address)" : cert.email_status}</>)}
+                    {!cert.emailed_at && (!r.email ? <> · no email address</> :cert.email_status && <> · email {cert.email_status === "skipped" ? "not sent (no address)" : cert.email_status}</>)}
                   </p>
                   {cert.email_status === "failed" && cert.email_error && <p className="muted">Email error: {cert.email_error}</p>}
                   {cert.revoke_reason && <p className="muted">Reason: {cert.revoke_reason}</p>}
@@ -371,7 +410,7 @@ export function RegistrationDrawer({ id, lookups, onClose, onChanged, onReviewed
                         {busy ? <Spinner /> : <RefreshCw size={14} />} Regenerate
                       </button>
                     )}
-                    {canWrite && certValid && (
+                    {SHOW_SEND_SMS && canWrite && certValid && (
                       <button type="button" className="btn btn--ghost btn--sm" onClick={sendSms} disabled={busy} title={`Send the certificate link to ${r.phone} by SMS`}>
                         <MessageSquareText size={14} /> Send SMS
                       </button>

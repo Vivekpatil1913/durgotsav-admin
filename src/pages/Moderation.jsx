@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, Copy, Expand, RotateCcw, XCircle } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { BulkBar } from "../components/BulkBar.jsx";
-import { RegistrationDrawer } from "../components/RegistrationDrawer.jsx";
+import { confirmReview, RegistrationDrawer } from "../components/RegistrationDrawer.jsx";
 import { EmptyState, PageHeader, Pagination, Spinner, useSelection } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
@@ -69,7 +69,7 @@ export default function Moderation() {
 
   async function quick(id, action) {
     if (action === "reject") return open(id); // rejection needs a reason — use the drawer
-    if (action === "mark_duplicate" && !(await confirm({ title: "Mark as duplicate?", message: "The participant will see that this photo was already used in another registration. Any certificate is revoked.", confirmLabel: "Mark duplicate", tone: "danger" }))) return;
+    if (!(await confirmReview(confirm, action, rows.find((r) => r.id === id)))) return;
     setBusyId(id);
     try {
       await api.post(`/admin/registrations/${id}/review`, { action });
