@@ -7,7 +7,7 @@ import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
-import { clean, useQueryState } from "../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { apiError, assetUrl, downloadFile } from "../lib/api.js";
 import { fmtDateTime, participantLine, STATUS } from "../lib/format.js";
 
@@ -32,8 +32,9 @@ export default function Registrations() {
   const [exporting, setExporting] = useState(false);
   const q = useDebounced(search);
   const [openId, setOpenId] = useState(null);
-  const selection = useSelection();
-  const canBulk = useAuth().hasExplicitPermission("moderation_bulk");
+  const selection = useSelection(f);
+  const { hasExplicitPermission, hasPermission } = useAuth();
+  const canBulk = hasExplicitPermission("moderation_bulk");
   const lookups = useFetch("/admin/lookups").data?.data ?? { divisions: [], districts: [], talukas: [], forts: [] };
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function Registrations() {
   const params = clean({ ...f });
   const { data, loading, error, reload } = useFetch("/admin/registrations", params);
   const rows = data?.data ?? [];
+  useLastPage(data?.meta, (p) => setF({ page: String(p) }));
   // District is the location the form asks for (SRS v2.1): every district is listed; a division narrows the list
   const districts = f.division_id ? lookups.districts.filter((d) => String(d.division_id) === f.division_id) : lookups.districts;
   const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
@@ -91,7 +93,7 @@ export default function Registrations() {
         title="Registrations"
         crumbs={["Participation"]}
         subtitle="Every participant submission. Click a row to review, edit or verify."
-        actions={<button type="button" className="btn btn--ghost" onClick={exportCsv} disabled={exporting}><Download size={16} /> {exporting ? "Exporting…" : "Export CSV"}</button>}
+        actions={hasPermission("reports", "write") && <button type="button" className="btn btn--ghost" onClick={exportCsv} disabled={exporting}><Download size={16} /> {exporting ? "Exporting…" : "Export CSV"}</button>}
       />
 
       <div className="resource-tabs">
@@ -143,7 +145,7 @@ export default function Registrations() {
 
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={(r) => setOpenId(r.id)} selection={f.trashed || !canBulk ? undefined : selection} empty="No registrations match these filters"
-          sort={{ key: f.sort, dir: f.dir, onSort: setF }} />
+          sort={{ key: f.sort, dir: f.dir, onSort: setF }} meta={data?.meta} />
         <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} jump={false} />
       </section>
 

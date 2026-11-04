@@ -6,7 +6,7 @@ import { EmptyState, PageHeader, Pagination, Spinner, useSelection } from "../co
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useFetch } from "../hooks/useFetch.js";
-import { clean, useQueryState } from "../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtNumber, timeAgo } from "../lib/format.js";
 
@@ -21,12 +21,14 @@ export default function Moderation() {
   // so Super Admin can turn it off via the Roles page.
   const canBulk = hasExplicitPermission("moderation_bulk");
   const [f, setF] = useQueryState({ status: "pending", division_id: "", district_id: "", taluka_id: "", fort_id: "", limit: "10", page: "1" });
-  const selection = useSelection();
+  const selection = useSelection(f);
   const [openId, setOpenId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const lookups = useFetch("/admin/lookups").data?.data ?? { divisions: [], districts: [], talukas: [], forts: [] };
   const { data, loading, error, reload } = useFetch("/admin/registrations", clean({ ...f, sort: "oldest" }));
   const rows = data?.data ?? [];
+  // Reviewing every card on the last page empties it; the queue goes on from the page before
+  useLastPage(data?.meta, (p) => setF({ page: String(p) }));
 
   // The drawer walks the whole queue, not just the cards on this page: Previous / Next and "3 of 25" come from the
   // server (GET …/:id/neighbors) with the queue's filters and order, so they stay right while other admins review.

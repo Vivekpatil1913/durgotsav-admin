@@ -7,12 +7,15 @@ import { Badge, DataTable, Drawer, PageHeader, Pagination, Spinner } from "../co
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
-import { clean, useQueryState } from "../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, assetUrl } from "../lib/api.js";
 import { fmtDate, fmtDateTime, ROLES } from "../lib/format.js";
 import { RESOURCES } from "../resources.js";
 
 const ENQUIRY_TONE = { new: "warning", in_progress: "info", resolved: "success", spam: "neutral" };
+
+// Rows per page; the server pages the list
+const PAGE_SIZE = 10;
 
 function cell(col, row) {
   const v = row[col.key];
@@ -34,7 +37,7 @@ export default function ResourcePage() {
   const cfg = RESOURCES[resource];
   const { can, hasPermission } = useAuth();
   const { toast, confirm } = useUi();
-  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", sort: "", dir: "", limit: "25", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
+  const [f, setF] = useQueryState({ q: "", is_active: "", trashed: "", sort: "", dir: "", page: "1", ...Object.fromEntries((cfg?.filters ?? []).map((x) => [x.key, ""])) });
   const [search, setSearch] = useState(f.q);
   const q = useDebounced(search);
   const [editing, setEditing] = useState(null); // null | 'new' | record
@@ -66,7 +69,10 @@ export default function ResourcePage() {
   }, [q]);
   useEffect(() => setSearch(""), [resource]);
 
-  const { data, loading, error, reload } = useFetch(cfg ? cfg.endpoint : null, clean({ ...f }));
+  const { data, loading, error, reload } = useFetch(cfg ? cfg.endpoint : null, clean({ ...f, limit: PAGE_SIZE }));
+
+  useLastPage(data?.meta, (p) => setF({ page: String(p) }));
+
   if (!cfg) return <Navigate to="/" replace />;
   if (cfg.perm ? !hasPermission(...cfg.perm) : !can(...cfg.roles)) return <div className="alert alert--error">You do not have access to {cfg.title}.</div>;
 
@@ -175,9 +181,9 @@ export default function ResourcePage() {
       </div>
 
       <section className="panel panel--flush">
-        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} startIndex={data?.meta ? (data.meta.page - 1) * data.meta.limit : 0} total={data?.meta?.total}
+        <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={trashed ? undefined : (r) => open(r)} empty={trashed ? "Trash is empty" : `No ${cfg.title.toLowerCase()} yet`} meta={data?.meta}
           sort={{ key: f.sort, dir: f.dir, onSort: setF, clearable: true }} />
-        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} onLimit={(l) => setF({ limit: String(l) })} />
+        <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
       </section>
 
       <Drawer open={Boolean(editing)} onClose={() => { setEditing(null); setViewOnly(false); }} wide={cfg.gallery}

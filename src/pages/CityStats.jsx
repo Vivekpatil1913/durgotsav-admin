@@ -1,30 +1,21 @@
-import { useState } from "react";
 import { DataTable, PageHeader, Pagination } from "../components/ui.jsx";
 import { useFetch } from "../hooks/useFetch.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { fmtNumber } from "../lib/format.js";
 
 const CITY_LIMIT = 10;
 
 export default function CityStats() {
-  const [page,     setPage]     = useState(1);
-  const [district, setDistrict] = useState("");
-  const [sort,     setSort]     = useState({ sort: "registrations", dir: "desc" });
+  const [f, setF] = useQueryState({ district: "", sort: "registrations", dir: "desc", page: "1" });
 
-  const params = {
-    page,
-    limit: CITY_LIMIT,
-    ...sort,
-    ...(district ? { district } : {}),
-  };
-
-  const { data, loading, error } = useFetch("/admin/stats/cities", params);
+  const { data, loading, error } = useFetch("/admin/stats/cities", clean({ ...f, limit: CITY_LIMIT }));
   const { data: distData }       = useFetch("/admin/stats/districts", { limit: 50 });
 
   const raw        = data?.data;
   const rows       = raw?.items ?? [];
   const meta       = raw?.meta  ?? null;
   const total      = meta?.total      ?? rows.length;
-  const totalPages = meta?.totalPages ?? 1;
+  useLastPage(meta, (p) => setF({ page: String(p) }));
 
   const districtList = distData?.data?.items ?? [];
 
@@ -99,8 +90,8 @@ export default function CityStats() {
           <select
             className="input input--sm"
             style={{ width: "auto", minWidth: 190 }}
-            value={district}
-            onChange={(e) => { setDistrict(e.target.value); setPage(1); }}
+            value={f.district}
+            onChange={(e) => setF({ district: e.target.value })}
             aria-label="Filter by district"
           >
             <option value="">All districts</option>
@@ -120,15 +111,10 @@ export default function CityStats() {
           loading={loading}
           empty="No city data available"
           rowKey={(r) => `${r.district_id ?? ""}__${r.city ?? ""}`}
-          startIndex={(page - 1) * CITY_LIMIT}
-          sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
+          meta={meta}
+          sort={{ key: f.sort, dir: f.dir, onSort: setF }}
         />
-        {(total > 0 || page > 1) && (
-          <Pagination
-            meta={{ page, totalPages, total, limit: CITY_LIMIT }}
-            onPage={setPage}
-          />
-        )}
+        {total > 0 && <Pagination meta={meta} onPage={(p) => setF({ page: String(p) })} />}
       </section>
     </>
   );

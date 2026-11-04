@@ -1,10 +1,10 @@
-import { AlertTriangle, CheckCircle2, Clock, Download, History, Mail, MailX, RefreshCw, RotateCcw, RotateCw, Search, Send } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle2, Clock, Download, History, Mail, MailX, RotateCcw, RotateCw, Search, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge, DataTable, Drawer, PageHeader, Pagination, Spinner, StatCard } from "../components/ui.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
-import { clean, useQueryState } from "../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, downloadFile } from "../lib/api.js";
 import { fmtDateTime, fmtNumber, timeAgo } from "../lib/format.js";
 
@@ -36,8 +36,10 @@ function Delivery({ c }) {
   );
 }
 
-function QueueSummary({ stats, onFilter }) {
+// A delivery card filters the list and a second click takes that filter off; "All certificates" takes off every filter
+function QueueSummary({ stats, selected, filtered, onFilter, onShowAll }) {
   if (!stats) return null;
+  const card = (status) => ({ active: selected === status, onClick: () => onFilter(selected === status ? "" : status) });
   return (
     <>
       {!stats.mail_enabled && (
@@ -45,19 +47,21 @@ function QueueSummary({ stats, onFilter }) {
           <AlertTriangle size={16} /> Email is switched off on the server (SMTP is not configured). Certificate emails stay queued until it is set up.
         </div>
       )}
-      <section className="stat-grid">
+      <section className="stat-grid stat-grid--six">
+        <StatCard label="All certificates" icon={Award} value={stats.total}
+          hint={filtered ? "Show every record" : "Showing every record"} active={!filtered} onClick={onShowAll} />
         <StatCard label="Waiting to send" icon={Clock} tone="warning" value={stats.queued}
           hint={stats.due_now ? `${fmtNumber(stats.due_now)} due now` : stats.next_run_at ? `Next retry ${fmtDateTime(stats.next_run_at)}` : "Queue is empty"}
-          onClick={() => onFilter("queued")} />
+          {...card("queued")} />
         <StatCard label="Sending now" icon={Send} value={stats.processing}
           hint={stats.last_activity_at ? `Last activity ${timeAgo(stats.last_activity_at)}` : "No deliveries yet"}
-          onClick={() => onFilter("processing")} />
+          {...card("processing")} />
         <StatCard label="Emailed" icon={CheckCircle2} tone="success" value={stats.sent}
-          hint={`${fmtNumber(stats.sent_last_hour)} in the last hour`} onClick={() => onFilter("sent")} />
+          hint={`${fmtNumber(stats.sent_last_hour)} in the last hour`} {...card("sent")} />
         <StatCard label="Failed" icon={MailX} tone="danger" value={stats.failed}
-          hint="Rejected, or every retry failed" onClick={() => onFilter("failed")} />
+          hint="Rejected, or every retry failed" {...card("failed")} />
         <StatCard label="No email address" icon={Mail} tone="gold" value={stats.skipped}
-          hint="Download link by SMS only" onClick={() => onFilter("skipped")} />
+          hint="Download link by SMS only" {...card("skipped")} />
       </section>
     </>
   );
@@ -111,7 +115,7 @@ function DeliveryLog({ cert, onClose }) {
 
 export default function Certificates() {
   const { can } = useAuth();
-  const { toast, confirm } = useUi();
+  const { toast } = useUi();
   const [f, setF] = useQueryState({ q: "", state: "", emailed: "", email_status: "", sort: "issued_at", dir: "desc", page: "1" });
   const [search, setSearch] = useState(f.q);
   const [logFor, setLogFor] = useState(null);
@@ -121,15 +125,17 @@ export default function Certificates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
   const { data, loading, error, reload } = useFetch("/admin/certificates", clean({ ...f, limit: PAGE_SIZE }));
+  useLastPage(data?.meta, (p) => setF({ page: String(p) }));
+  const filtered = Boolean(f.q || f.state || f.emailed || f.email_status);
+  // Sort order stays: it is not a filter
+  const showAll = () => {
+    setSearch("");
+    setF({ q: "", state: "", emailed: "", email_status: "" });
+  };
   const queue = useFetch("/admin/certificates/email-queue");
   const stats = queue.data?.data;
   const reloadQueue = queue.reload;
-  // Failed emails a plain "Retry failed" leaves alone: the mail server refused the address, which is not corrected yet
-  const rejected = stats?.rejected ?? 0;
-  const retryable = Math.max(0, (stats?.failed ?? 0) - rejected);
-  // After a bulk action the queue is followed for a minute, even before its first emails are counted
-  const [followUntil, setFollowUntil] = useState(0);
-  const busy = followUntil > 0 || stats?.queued > 0 || stats?.processing > 0;
+  const busy = stats?.queued > 0 || stats?.processing > 0;
 
   // Live queue counts while emails are going out (the server recounts every 15 s): polled only while this tab is
   // visible and there is work, and once more as soon as the tab is looked at again
@@ -144,12 +150,6 @@ export default function Certificates() {
     };
   }, [busy, reloadQueue]);
 
-  useEffect(() => {
-    if (!followUntil) return undefined;
-    const t = setTimeout(() => setFollowUntil(0), Math.max(0, followUntil - Date.now()));
-    return () => clearTimeout(t);
-  }, [followUntil]);
-
   const act = async (fn, ok) => {
     try {
       await fn();
@@ -160,41 +160,6 @@ export default function Certificates() {
       toast(apiError(err).message, "error");
     }
   };
-
-  // The server queues them in the background (it answers at once); a second run while one is going is refused
-  async function sendPending() {
-    if (!(await confirm({ title: "Email all pending certificates?", message: "Every verified participant with an email who has not yet received their certificate will be queued, in the background. Each participant is emailed once.", confirmLabel: "Queue emails", tone: "primary" }))) return;
-    act(async () => {
-      await api.post("/admin/certificates/send-pending");
-      setFollowUntil(Date.now() + 60_000);
-    }, "Queuing pending emails in the background — the delivery counts update as they go out");
-  }
-
-  // The box retries rejected addresses as well (include_rejected): for a refusal that came from the sending side (relay
-  // or sender settings, now fixed), which the mail server reports like a bad address for every recipient
-  async function retryFailed() {
-    let includeRejected = false;
-    const message = (
-      <>
-        Failed certificate emails get a fresh set of attempts. Fix the cause first (SMTP login, quota, a missing photo).
-        An address the mail server rejected is tried again only once it has been corrected.
-        {rejected > 0 && (
-          <>
-            {" "}Tick the box if the refusal came from the sending side instead (relay or sender settings) and that is fixed.<br />
-            <label className="toggle" style={{ marginTop: 12 }}>
-              <input type="checkbox" onChange={(e) => { includeRejected = e.target.checked; }} /> Also retry {fmtNumber(rejected)} rejected
-            </label>
-          </>
-        )}
-      </>
-    );
-    if (!(await confirm({ title: "Retry failed emails?", message, confirmLabel: "Retry", tone: "primary" }))) return;
-    act(async () => {
-      const { data: res } = await api.post("/admin/certificates/retry-failed", includeRejected ? { include_rejected: true } : {});
-      toast(`${fmtNumber(res.data.queued)} email(s) queued again`, "info");
-      setFollowUntil(Date.now() + 60_000);
-    }, "Retrying in the background");
-  }
 
   const columns = [
     { key: "certificate_no", sortKey: "certificate_no", label: "Certificate", render: (c) => <span className="mono">{c.certificate_no}</span> },
@@ -220,16 +185,10 @@ export default function Certificates() {
   return (
     <>
       <PageHeader title="Certificates" crumbs={["Participation"]} subtitle="Digital अभिनंदन पत्र issued on verification and emailed automatically."
-        actions={(
-          <>
-            <button type="button" className="btn btn--ghost" title="Reload the list and the delivery counts" onClick={() => { reload(); reloadQueue(); }}><RotateCw size={16} /> Refresh</button>
-            {can("admin") && stats?.failed > 0 && <button type="button" className="btn btn--outline" onClick={retryFailed}><RefreshCw size={16} /> Retry failed ({fmtNumber(retryable)}{rejected > 0 && ` + ${fmtNumber(rejected)} rejected`})</button>}
-            {can("admin") && <button type="button" className="btn btn--primary" onClick={sendPending}><Mail size={16} /> Email pending</button>}
-          </>
-        )} />
-      <QueueSummary stats={stats} onFilter={(s) => setF({ email_status: s })} />
+        actions={<button type="button" className="btn btn--ghost" title="Reload the list and the delivery counts" onClick={() => { reload(); reloadQueue(); }}><RotateCw size={16} /> Refresh</button>} />
+      <QueueSummary stats={stats} selected={f.email_status} filtered={filtered} onFilter={(s) => setF({ email_status: s })} onShowAll={showAll} />
       <div className="resource-tabs" role="tablist" aria-label="Certificate state">
-        {[["", "All certificates"], ["valid", "Valid"], ["revoked", "Revoked"]].map(([k, l]) => (
+        {[["", "All"], ["valid", "Valid"], ["revoked", "Revoked"]].map(([k, l]) => (
           <button key={l} type="button" role="tab" aria-selected={f.state === k} className={`resource-tab ${f.state === k ? "is-active" : ""}`} onClick={() => setF({ state: k })}>{l}</button>
         ))}
       </div>
@@ -249,8 +208,8 @@ export default function Certificates() {
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={data?.data} loading={loading} error={error} rowKey={(c) => c.id}
           sort={{ key: f.sort, dir: f.dir, onSort: setF }}
-          startIndex={((data?.meta?.page ?? 1) - 1) * PAGE_SIZE}
-          empty="No certificates yet — they are issued when a registration is verified" />
+          meta={data?.meta}
+          empty={filtered ? "No certificates match these filters" : "No certificates yet — they are issued when a registration is verified"} />
         <Pagination meta={data?.meta} onPage={(p) => setF({ page: String(p) })} />
       </section>
       <DeliveryLog cert={logFor} onClose={() => setLogFor(null)} />

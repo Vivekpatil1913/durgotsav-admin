@@ -4,6 +4,7 @@ import { api, apiError } from "../lib/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { Spinner, DataTable, Drawer, Field, PageHeader, Pagination } from "../components/ui.jsx";
+import { useDebounced } from "../hooks/useFetch.js";
 
 const EMPTY_FORM = {
   name: "", email: "", role_id: "", password: "", is_active: true, division_ids: [],
@@ -19,7 +20,7 @@ export default function Users() {
   const [meta,      setMeta]      = useState({ total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 });
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
-  const [query,     setQuery]     = useState("");
+  const [search,    setSearch]    = useState("");
   const [trashed,   setTrashed]   = useState(false);
   const [sort,      setSort]      = useState({ sort: "", dir: "" });
   const [page,      setPage]      = useState(1);
@@ -28,6 +29,7 @@ export default function Users() {
   const [saving,    setSaving]    = useState(false);
   const [saveErr,   setSaveErr]   = useState(null);
   const nameRef = useRef(null);
+  const query = useDebounced(search.trim());
 
   // Reloads the current page, so saving, deleting or restoring keeps the admin where they were
   const load = useCallback(async () => {
@@ -254,8 +256,8 @@ export default function Users() {
           <input
             className="input"
             placeholder="Search name or email…"
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </label>
       </div>
@@ -269,8 +271,7 @@ export default function Users() {
             rows={admins}
             loading={loading}
             empty={trashed ? "Trash is empty" : "No admin users yet"}
-            startIndex={(meta.page - 1) * meta.limit}
-            total={meta.total}
+            meta={meta}
             sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); }, clearable: true }}
           />
           <Pagination meta={meta} onPage={setPage} />

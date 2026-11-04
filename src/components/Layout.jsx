@@ -1,7 +1,7 @@
 import {
   AlertTriangle, Award, BarChart3, ExternalLink, FileText, Globe, HelpCircle, Images,
   Headphones, Inbox, KeyRound, LayoutDashboard, LogOut, Map, Menu, MessageSquareQuote, PanelLeftClose, PanelLeftOpen,
-  ScrollText, Settings, ShieldCheck, Users, UserCog, X, ShieldOff, Trophy, ListChecks, Landmark, SlidersHorizontal,
+  Settings, ShieldCheck, Users, UserCog, X, ShieldOff, Trophy, ListChecks, Landmark, SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
@@ -68,7 +68,6 @@ export const NAV = [
       { to: "/users",      label: "Admin users", icon: UserCog,    perm: ["users"]      },
       { to: "/roles",      label: "Roles",       icon: ShieldOff,  perm: ["roles"]      },
       { to: "/settings",   label: "Settings",    icon: Settings,   perm: ["settings"]   },
-      { to: "/audit-logs", label: "Audit log",   icon: ScrollText, perm: ["audit_logs"] },
     ],
   },
 ];

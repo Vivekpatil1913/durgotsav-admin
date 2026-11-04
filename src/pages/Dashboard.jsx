@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, Award, CalendarDays, Clock, Copy, Images, Inbox, ShieldCheck, Upload,
+  AlertTriangle, CalendarDays, Clock, Images, Inbox, ShieldCheck,
   Users, Video, XCircle,
 } from "lucide-react";
 import { useState } from "react";
@@ -8,7 +8,7 @@ import { DataTable, HBarList, PageHeader, Pagination, StatCard } from "../compon
 import { EDITION_YEAR } from "../config/edition.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useFetch } from "../hooks/useFetch.js";
-import { fmtNumber, timeAgo } from "../lib/format.js";
+import { fmtNumber } from "../lib/format.js";
 
 // ---------------------------------------------------------------- RegionDonut
 // Division share of registrations; click a division to drill into its districts.
@@ -171,8 +171,6 @@ function DivisionStatsPanel() {
   const rows       = raw?.items ?? [];
   const meta       = raw?.meta ?? null;
   const total      = meta?.total      ?? rows.length;
-  const totalPages = meta?.totalPages ?? 1;
-  const grand      = rows.reduce((s, r) => s + (Number(r.total) || 0), 0);
 
   const columns = [
     {
@@ -186,8 +184,8 @@ function DivisionStatsPanel() {
       label: "Share",
       render: (r) => (
         <div className="share">
-          <span className="share__track"><span style={{ width: `${grand ? (r.total / grand) * 100 : 0}%` }} /></span>
-          <small>{grand ? ((r.total / grand) * 100).toFixed(1) : "0.0"}%</small>
+          <span className="share__track"><span style={{ width: `${r.share ?? 0}%` }} /></span>
+          <small>{(r.share ?? 0).toFixed(1)}%</small>
         </div>
       ),
     },
@@ -217,21 +215,16 @@ function DivisionStatsPanel() {
         onRowClick={(r) => navigate(`/registrations?division_id=${r.id}`)}
         empty="No division data available yet"
         rowKey={(r) => r.id ?? r.division}
-        startIndex={(page - 1) * DIVISION_PAGE_SIZE}
+        meta={meta}
         sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
-      {(total > 0 || page > 1) && (
-        <Pagination
-          meta={{ page, totalPages, total, limit: DIVISION_PAGE_SIZE }}
-          onPage={setPage}
-        />
-      )}
+      {total > 0 && <Pagination meta={meta} onPage={setPage} />}
     </section>
   );
 }
 
 // ---------------------------------------------------------------- DistrictStatsPanel
-// Fetches all districts once (max 36 rows), sorted by the server, then paginates client-side, 10 per page.
+// Sorted and paged by the server, 10 per page; the shares are of every registration the admin can see, not of this page
 const DISTRICT_PAGE_SIZE = 10;
 
 function DistrictStatsPanel() {
@@ -239,15 +232,11 @@ function DistrictStatsPanel() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState({ sort: "total", dir: "desc" });
 
-  // Fetch all districts (≤36 in India) in one shot — paginated endpoint, request limit=50
-  const { data, loading, error } = useFetch("/admin/stats/districts", { limit: 50, ...sort });
-  const allRows = data?.data?.items ?? [];
-  const grand   = allRows.reduce((s, r) => s + (Number(r.total) || 0), 0);
-
-  // Client-side slice
-  const total      = allRows.length;
-  const totalPages = Math.max(1, Math.ceil(total / DISTRICT_PAGE_SIZE));
-  const rows       = allRows.slice((page - 1) * DISTRICT_PAGE_SIZE, page * DISTRICT_PAGE_SIZE);
+  const { data, loading, error } = useFetch("/admin/stats/districts", { page, limit: DISTRICT_PAGE_SIZE, ...sort });
+  const raw   = data?.data;
+  const rows  = raw?.items ?? [];
+  const meta  = raw?.meta ?? null;
+  const total = meta?.total ?? rows.length;
 
   const columns = [
     {
@@ -261,8 +250,8 @@ function DistrictStatsPanel() {
       label: "Share",
       render: (r) => (
         <div className="share">
-          <span className="share__track"><span style={{ width: `${grand ? (r.total / grand) * 100 : 0}%` }} /></span>
-          <small>{grand ? ((r.total / grand) * 100).toFixed(1) : "0.0"}%</small>
+          <span className="share__track"><span style={{ width: `${r.share ?? 0}%` }} /></span>
+          <small>{(r.share ?? 0).toFixed(1)}%</small>
         </div>
       ),
     },
@@ -293,15 +282,10 @@ function DistrictStatsPanel() {
         onRowClick={(r) => navigate(`/registrations?district_id=${r.id}`)}
         empty="No district data available yet"
         rowKey={(r) => r.id ?? r.district}
-        startIndex={(page - 1) * DISTRICT_PAGE_SIZE}
+        meta={meta}
         sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
-      {totalPages > 1 && (
-        <Pagination
-          meta={{ page, totalPages, total, limit: DISTRICT_PAGE_SIZE }}
-          onPage={setPage}
-        />
-      )}
+      {meta?.totalPages > 1 && <Pagination meta={meta} onPage={setPage} />}
     </section>
   );
 }
@@ -327,7 +311,6 @@ function CityStatsPanel({ districtList }) {
   const rows       = raw?.items ?? [];
   const meta       = raw?.meta ?? null;
   const total      = meta?.total      ?? rows.length;
-  const totalPages = meta?.totalPages ?? 1;
 
   const columns = [
     { key: "city",     sortKey: "city",     label: "City / Taluka", render: (r) => <strong>{r.city || "—"}</strong> },
@@ -376,15 +359,10 @@ function CityStatsPanel({ districtList }) {
         loading={loading}
         empty="No city data available"
         rowKey={(r) => `${r.district ?? ""}__${r.city ?? ""}`}
-        startIndex={(page - 1) * CITY_LIMIT}
+        meta={meta}
         sort={{ key: sort.sort, dir: sort.dir, onSort: (s) => { setSort(s); setPage(1); } }}
       />
-      {(total > 0 || page > 1) && (
-        <Pagination
-          meta={{ page, totalPages, total, limit: CITY_LIMIT }}
-          onPage={setPage}
-        />
-      )}
+      {total > 0 && <Pagination meta={meta} onPage={setPage} />}
     </section>
   );
 }
@@ -426,18 +404,12 @@ export default function Dashboard() {
       )}
 
       {/* ---- Stat cards ---- */}
-      <section className="stat-grid" aria-busy={loading}>
+      <section className="stat-grid stat-grid--six" aria-busy={loading}>
         <StatCard
           label="Total registrations" icon={Users}
           value={t.registrations}
           hint={`${fmtNumber(t.today)} today`}
           onClick={() => navigate("/registrations")}
-        />
-        <StatCard
-          label="Photos uploaded" icon={Upload}
-          value={t.uploads ?? t.registrations}
-          hint={`${fmtNumber((t.pending ?? 0) + (t.info_requested ?? 0))} awaiting review`}
-          onClick={() => navigate("/moderation")}
         />
         <StatCard
           label="Awaiting review" icon={Clock} tone="warning"
@@ -451,21 +423,9 @@ export default function Dashboard() {
           onClick={() => navigate("/registrations?status=verified")}
         />
         <StatCard
-          label="Certificates issued" icon={Award} tone="gold"
-          value={t.certificates}
-          hint={`${fmtNumber(t.certificates_emailed)} emailed`}
-          onClick={() => navigate("/certificates")}
-        />
-        <StatCard
           label="Rejected" icon={XCircle} tone="danger"
           value={t.rejected}
           onClick={() => navigate("/registrations?status=rejected")}
-        />
-        <StatCard
-          label="Duplicates" icon={Copy} tone="gold"
-          value={t.duplicate}
-          hint={`${fmtNumber(t.pending_duplicates)} auto-flagged in queue`}
-          onClick={() => navigate("/moderation?status=duplicate")}
         />
         <StatCard
           label="Gallery photos" icon={Images}
@@ -496,26 +456,9 @@ export default function Dashboard() {
           {d && <HBarList items={d.by_district.filter((x) => x.total > 0).map((x) => ({ name: x.district, count: x.total }))} />}
         </section>
 
-        <section className="panel">
+        <section className="panel panel--span2">
           <header className="panel__head"><h2>Replicas by fort</h2></header>
           {d && <HBarList items={d.by_fort} limit={12} />}
-        </section>
-
-        <section className="panel">
-          <header className="panel__head"><h2>Recent activity</h2><Link to="/audit-logs">Audit log →</Link></header>
-          <ul className="activity">
-            {d?.recent_activity.map((a) => (
-              <li key={a.id}>
-                <span className="activity__dot" aria-hidden="true" />
-                <span>
-                  <strong>{a.admin_name ?? "System"}</strong>{" "}
-                  {a.action.replace(/_/g, " ")} {a.entity}{a.entity_id ? ` #${a.entity_id}` : ""}
-                </span>
-                <time dateTime={a.created_at}>{timeAgo(a.created_at)}</time>
-              </li>
-            ))}
-            {d && !d.recent_activity.length && <li className="muted">No activity yet</li>}
-          </ul>
         </section>
 
       </div>

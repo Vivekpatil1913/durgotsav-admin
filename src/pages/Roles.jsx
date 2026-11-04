@@ -171,7 +171,7 @@ export default function Roles() {
         <div className="alert alert--error">{error}</div>
       ) : (
         <section className="panel panel--flush">
-          <DataTable columns={cols} rows={roles} loading={loading} empty="No roles yet" startIndex={0} total={roles.length}
+          <DataTable columns={cols} rows={roles} loading={loading} empty="No roles yet"
             sort={{ key: sort.sort, dir: sort.dir, onSort: setSort, clearable: true }} />
         </section>
       )}

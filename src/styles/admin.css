@@ -1244,12 +1244,6 @@ select.input {
   outline-offset: 1px;
   border-color: var(--brand);
 }
-.pagination__limit {
-  height: 30px;
-  padding: 0 8px;
-  font-size: 12px;
-  min-width: 108px;
-}
 .share {
   display: flex;
   align-items: center;
@@ -1285,6 +1279,18 @@ code.meta {
   gap: 12px;
   margin-bottom: 16px;
 }
+/* Six cards in even rows, none left alone on a row of its own */
+.stat-grid--six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+@media (max-width: 1300px) {
+  .stat-grid--six {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.stat-grid--six .stat-card {
+  align-content: start;
+}
 .stat-card {
   position: relative;
   display: grid;
@@ -1301,6 +1307,10 @@ code.meta {
 button.stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgb(34 24 15 / 0.08);
+}
+.stat-card.is-active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand), var(--shadow);
 }
 .stat-card__icon {
   display: grid;

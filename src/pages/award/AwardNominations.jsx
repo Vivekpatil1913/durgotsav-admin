@@ -5,7 +5,7 @@ import { Badge, DataTable, PageHeader, Pagination } from "../../components/ui.js
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useUi } from "../../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../../hooks/useFetch.js";
-import { clean, useQueryState } from "../../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../../hooks/useQueryState.js";
 import { apiError, downloadFile } from "../../lib/api.js";
 import { AWARD_BASE, AWARD_CATEGORY, AWARD_SECTION, AWARD_STATUS, optionLabel } from "../../lib/award.js";
 import { fmtDateTime, fmtNumber } from "../../lib/format.js";
@@ -49,6 +49,7 @@ export default function AwardNominations() {
   const { data, loading, error } = useFetch("/admin/shivdurg-award/nominations", clean({ ...f, limit: PAGE_SIZE }));
   const rows = data?.data ?? [];
   const meta = data?.meta;
+  useLastPage(meta, (p) => setF({ page: String(p) }));
   const talukas = f.district_id ? (lookups.talukas ?? []).filter((t) => String(t.district_id) === f.district_id) : [];
   const workOptions = f.category === "organization" ? options?.organization_work
     : f.category === "individual" ? options?.individual_work
@@ -147,7 +148,7 @@ export default function AwardNominations() {
       <section className="panel panel--flush">
         <DataTable columns={columns} rows={rows} loading={loading} error={error} onRowClick={open}
           sort={{ key: f.sort, dir: f.dir, onSort: setF }}
-          startIndex={meta ? (meta.page - 1) * meta.limit : 0} empty="No nominations match these filters" />
+          meta={meta} empty="No nominations match these filters" />
         <Pagination meta={meta} onPage={(p) => setF({ page: String(p) })} />
       </section>
     </>

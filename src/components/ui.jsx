@@ -85,7 +85,7 @@ export function Drawer({ open, onClose, title, children, footer, wide, actions }
   );
 }
 
-export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100], jump = true }) {
+export function Pagination({ meta, onPage, jump = true }) {
   if (!meta) return null;
   // `capped`: the server stopped counting at `total` (more matches exist than can be browsed)
   const { page, totalPages, total, limit, capped } = meta;
@@ -102,11 +102,6 @@ export function Pagination({ meta, onPage, onLimit, limitOptions = [25, 50, 100]
     <div className="pagination">
       <span className="pagination__info">Showing <strong>{fmtNumber(from)}–{fmtNumber(to)}</strong> of <strong>{fmtNumber(total)}{more}</strong> records</span>
       <div className="pagination__nav">
-        {onLimit && (
-          <select className="input pagination__limit" value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Rows per page">
-            {limitOptions.map((n) => <option key={n} value={n}>{n} per page</option>)}
-          </select>
-        )}
         <button type="button" className="btn btn--outline btn--sm" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={14} /> Previous</button>
         <span className="pagination__page">
           Page{" "}
@@ -155,8 +150,11 @@ function headerContent(c, sort) {
  * selection: { selected:Set, onToggle(id), onToggleAll(ids) } (optional)
  * sort: { key, dir: "asc"|"desc", onSort({ sort, dir }), clearable? } (optional) — the caller re-fetches sorted rows
  * from the server; sortFirst is a column's first direction (counts and dates read best "desc")
+ * meta: the server's { page, limit } for these rows, the object Pagination gets, so S.NO. runs on across pages
+ * (11, 12… on page 2); only a list that is not paged leaves it out
  */
-export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id, startIndex = 0, total, sort }) {
+export function DataTable({ columns, rows, loading, error, onRowClick, selection, empty, rowKey = (r) => r.id, meta, sort }) {
+  const firstRow = meta ? (meta.page - 1) * meta.limit : 0;
   const ids = (rows ?? []).map(rowKey);
   const allSelected = selection && ids.length > 0 && ids.every((id) => selection.selected.has(id));
   const colSpan = columns.length + 2 + (selection ? 1 : 0);
@@ -212,7 +210,7 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
                     <input type="checkbox" aria-label="Select row" checked={selection.selected.has(id)} onChange={() => selection.onToggle(id)} />
                   </td>
                 )}
-                <td className="table__sno">{startIndex + idx + 1}</td>
+                <td className="table__sno">{firstRow + idx + 1}</td>
                 {columns.map((c) => <td key={c.key} className={c.className}>{c.render ? c.render(row) : row[c.key] ?? "—"}</td>)}
               </tr>
             );
@@ -223,8 +221,12 @@ export function DataTable({ columns, rows, loading, error, onRowClick, selection
   );
 }
 
-export function useSelection() {
+// filters: the list's filters. A selection belongs to one filtered list: paging keeps it, any other change drops it, so a
+// bulk action never reaches rows the admin can no longer see
+export function useSelection(filters) {
   const [selected, setSelected] = useState(new Set());
+  const scope = JSON.stringify({ ...filters, page: undefined });
+  useEffect(() => setSelected(new Set()), [scope]);
   return {
     selected,
     clear: () => setSelected(new Set()),
@@ -298,10 +300,11 @@ export function ImageUpload({ value, onChange, folder = "content", label = "Imag
   );
 }
 
-export function StatCard({ label, value, icon: Icon, tone = "brand", hint, onClick }) {
+// active: the card is a filter (true while it is the one applied)
+export function StatCard({ label, value, icon: Icon, tone = "brand", hint, onClick, active }) {
   const Comp = onClick ? "button" : "div";
   return (
-    <Comp type={onClick ? "button" : undefined} className={`stat-card stat-card--${tone}`} onClick={onClick}>
+    <Comp type={onClick ? "button" : undefined} className={`stat-card stat-card--${tone}${active ? " is-active" : ""}`} onClick={onClick} aria-pressed={active}>
       <span className="stat-card__icon"><Icon size={18} aria-hidden="true" /></span>
       <span className="stat-card__label">{label}</span>
       <strong className="stat-card__value">{fmtNumber(value)}</strong>

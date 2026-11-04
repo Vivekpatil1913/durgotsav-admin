@@ -16,7 +16,7 @@ import { Drawer, EmptyState, PageHeader, Pagination, Spinner, useSelection } fro
 import { useAuth } from "../context/AuthContext.jsx";
 import { useUi } from "../context/UiContext.jsx";
 import { useDebounced, useFetch } from "../hooks/useFetch.js";
-import { clean, useQueryState } from "../hooks/useQueryState.js";
+import { clean, useLastPage, useQueryState } from "../hooks/useQueryState.js";
 import { api, apiError, assetUrl, SITE_URL } from "../lib/api.js";
 import { fmtDateTime, fmtNumber, PARTICIPANT_TYPES } from "../lib/format.js";
 
@@ -42,7 +42,7 @@ export default function WebsiteGallery() {
   const [f, setF] = useQueryState(DEFAULTS);
   const [search, setSearch] = useState(f.q);
   const debouncedQ = useDebounced(search);
-  const selection = useSelection();
+  const selection = useSelection(f);
 
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -66,6 +66,7 @@ export default function WebsiteGallery() {
   const fetched = payload.data ?? [];
   const rows = fetched.map((r) => (r.photo_id in toggled ? { ...r, is_featured: toggled[r.photo_id] } : r));
   const meta = payload.meta;
+  useLastPage(meta, (p) => setF({ page: String(p) }));
   const loaded = payload.counts ?? {
     filter_total: 0,
     filter_selected: 0,
